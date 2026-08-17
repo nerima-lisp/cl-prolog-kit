@@ -6,7 +6,7 @@
 ;;;; their logic variables at macroexpansion time, so no evaluation of
 ;;;; user expressions ever happens inside the engine.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defmacro prolog (&body clauses)
   "Build a rulebase from CLAUSES.

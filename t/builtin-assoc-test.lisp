@@ -1,7 +1,7 @@
 ;;;; library(assoc) tests.  Wrapper predicates keep the opaque assoc term out
 ;;;; of the query so only plain result terms are asserted.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (defun make-assoc-rulebase ()
   (prolog
@@ -39,7 +39,7 @@
   ((replaced ?v)     :ordered (((?v . 9))))
   ((keys-of ?k)      :ordered (((?k a b c))))
   ((values-of ?v)    :ordered (((?v 1 2 3))))
-  ((list-of ?l)      :ordered (((?l (cl-prolog.user-atoms::- a 1) (cl-prolog.user-atoms::- b 2) (cl-prolog.user-atoms::- c 3)))))
+  ((list-of ?l)      :ordered (((?l (cl-prolog-kit.user-atoms::- a 1) (cl-prolog-kit.user-atoms::- b 2) (cl-prolog-kit.user-atoms::- c 3)))))
   ((del-keys ?dv ?k) :ordered (((?dv . 1) (?k b))))
   ((del-missing)     :fails)
   ((incremental-keys ?k) :ordered (((?k a b c))))
@@ -51,8 +51,8 @@
   ((get_assoc a not-an-assoc ?v) :signals)
   ;; a forged assoc with a non-pair-list argument is a catchable type error,
   ;; not a host crash / hang.
-  ((get_assoc a (cl-prolog.user-atoms::assoc 1) ?v) :signals)
-  ((get_assoc a (cl-prolog.user-atoms::assoc ((x))) ?v) :signals)
+  ((get_assoc a (cl-prolog-kit.user-atoms::assoc 1) ?v) :signals)
+  ((get_assoc a (cl-prolog-kit.user-atoms::assoc ((x))) ?v) :signals)
   ((list_to_assoc (not-a-pair) ?a) :signals)
   ((list_to_assoc ?unbound ?a)  :signals)
   ;; SWI rejects duplicate keys in list_to_assoc/2.

@@ -3,11 +3,11 @@
 ;;;; source-loader-transactions-test.lisp; interning/resource-error safety in
 ;;;; source-loader-limits-test.lisp.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (defun %temporary-prolog-pathname ()
   (merge-pathnames
-   (make-pathname :name (format nil ".cl-prolog-source-~A" (gensym))
+   (make-pathname :name (format nil ".cl-prolog-kit-source-~A" (gensym))
                   :type "pl")
    (truename ".")))
 
@@ -200,79 +200,79 @@
 ;; it; these cases hand-build malformed directive terms directly (bypassing
 ;; the parser) to exercise every arity/shape guard.
 (deftest-table source-directive-validates-arity-and-shape ()
-  (:signals (cl-prolog::%apply-source-directive!
-             'cl-prolog::not-a-list-goal (make-rulebase) (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             'cl-prolog-kit::not-a-list-goal (make-rulebase) (list '()) 'cl-prolog-kit::user)
             "a non-cons goal must be rejected")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::op 500 cl-prolog::yfx) (make-rulebase) (list '())
-             'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::op 500 cl-prolog-kit::yfx) (make-rulebase) (list '())
+             'cl-prolog-kit::user)
             "op directive must supply priority, specifier, and name")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::op 500 42 cl-prolog::the_operator) (make-rulebase)
-             (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::op 500 42 cl-prolog-kit::the_operator) (make-rulebase)
+             (list '()) 'cl-prolog-kit::user)
             "op specifier must be an atom, not a number")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::dynamic cl-prolog::a/1 cl-prolog::b/1) (make-rulebase)
-             (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::dynamic cl-prolog-kit::a/1 cl-prolog-kit::b/1) (make-rulebase)
+             (list '()) 'cl-prolog-kit::user)
             "dynamic directive must supply exactly one predicate indicator")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::table cl-prolog::a/1 cl-prolog::b/1) (make-rulebase)
-             (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::table cl-prolog-kit::a/1 cl-prolog-kit::b/1) (make-rulebase)
+             (list '()) 'cl-prolog-kit::user)
             "table directive must supply exactly one predicate indicator")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::use_module cl-prolog::a cl-prolog::b cl-prolog::c
-               cl-prolog::d)
-             (make-rulebase) (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::use_module cl-prolog-kit::a cl-prolog-kit::b cl-prolog-kit::c
+               cl-prolog-kit::d)
+             (make-rulebase) (list '()) 'cl-prolog-kit::user)
             "use_module directive must supply 1-2 trailing arguments")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::initialization cl-prolog::goal cl-prolog::extra)
-             (make-rulebase) (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::initialization cl-prolog-kit::goal cl-prolog-kit::extra)
+             (make-rulebase) (list '()) 'cl-prolog-kit::user)
             "initialization directive must supply exactly one goal")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::consult cl-prolog::a cl-prolog::b) (make-rulebase)
-             (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::consult cl-prolog-kit::a cl-prolog-kit::b) (make-rulebase)
+             (list '()) 'cl-prolog-kit::user)
             "consult directive must supply exactly one source")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::ensure_loaded cl-prolog::a cl-prolog::b) (make-rulebase)
-             (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::ensure_loaded cl-prolog-kit::a cl-prolog-kit::b) (make-rulebase)
+             (list '()) 'cl-prolog-kit::user)
             "ensure_loaded directive must supply exactly one source")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::load_files cl-prolog::a cl-prolog::b cl-prolog::c
-               cl-prolog::d)
-             (make-rulebase) (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::load_files cl-prolog-kit::a cl-prolog-kit::b cl-prolog-kit::c
+               cl-prolog-kit::d)
+             (make-rulebase) (list '()) 'cl-prolog-kit::user)
             "load_files directive must supply sources and at most one options argument")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::set_prolog_flag cl-prolog::flag) (make-rulebase)
-             (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::set_prolog_flag cl-prolog-kit::flag) (make-rulebase)
+             (list '()) 'cl-prolog-kit::user)
             "set_prolog_flag directive must supply exactly two arguments")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::char_conversion cl-prolog::x) (make-rulebase)
-             (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::char_conversion cl-prolog-kit::x) (make-rulebase)
+             (list '()) 'cl-prolog-kit::user)
             "char_conversion directive must supply exactly two arguments")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::discontiguous) (make-rulebase) (list '())
-             'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::discontiguous) (make-rulebase) (list '())
+             'cl-prolog-kit::user)
             "discontiguous directive must supply at least one predicate indicator")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::multifile) (make-rulebase) (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::multifile) (make-rulebase) (list '()) 'cl-prolog-kit::user)
             "multifile directive must supply at least one predicate indicator")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::include cl-prolog::a cl-prolog::b) (make-rulebase)
-             (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::include cl-prolog-kit::a cl-prolog-kit::b) (make-rulebase)
+             (list '()) 'cl-prolog-kit::user)
             "include directive must supply exactly one source")
-  (:signals (cl-prolog::%apply-source-directive!
-             '(cl-prolog::totally-unrecognized-directive) (make-rulebase)
-             (list '()) 'cl-prolog::user)
+  (:signals (cl-prolog-kit::%apply-source-directive!
+             '(cl-prolog-kit::totally-unrecognized-directive) (make-rulebase)
+             (list '()) 'cl-prolog-kit::user)
             "unrecognized directive functors must be rejected"))
 
 ;; %source-term-clause rejects terms that cannot name a clause: a bare
 ;; non-callable atom-value, or a rule whose head is neither an atom nor a
 ;; compound term.  Both terms are hand-built to bypass the parser.
 (deftest-table source-term-clause-rejects-non-clause-terms ()
-  (:signals (cl-prolog::%source-term-clause 42)
+  (:signals (cl-prolog-kit::%source-term-clause 42)
             "a bare number is not a consultable clause")
-  (:signals (cl-prolog::%source-term-clause
-             (list (cl-prolog::%prolog-symbol ":-") 42 'cl-prolog::body))
+  (:signals (cl-prolog-kit::%source-term-clause
+             (list (cl-prolog-kit::%prolog-symbol ":-") 42 'cl-prolog-kit::body))
             "a rule head must be an atom or compound term"))
 
 (deftest source-loader-load-files-directive-honors-if-not-loaded-option ()
@@ -316,18 +316,18 @@
      (let ((rulebase (consult-prolog "original.")))
        (signals-error (consult-prolog ,source rulebase))
        (is (%source-query-succeeds-p rulebase "original"))
-       (is (not (%source-predicate-defined-p rulebase 'cl-prolog::temporary)))
+       (is (not (%source-predicate-defined-p rulebase 'cl-prolog-kit::temporary)))
        (is (%source-query-succeeds-p rulebase "assertz(after_rollback)"))
        (is (%source-query-succeeds-p rulebase "after_rollback"))
-       (is (eq (last (cl-prolog::rulebase-entries rulebase))
-               (cl-prolog::rulebase-entries-tail rulebase)))
+       (is (eq (last (cl-prolog-kit::rulebase-entries rulebase))
+               (cl-prolog-kit::rulebase-entries-tail rulebase)))
        (is (loop for predicate-key being the hash-keys
-                   of (cl-prolog::rulebase-predicate-index rulebase)
+                   of (cl-prolog-kit::rulebase-predicate-index rulebase)
                    using (hash-value entries)
                  always
                  (eq (last entries)
                      (gethash predicate-key
-                              (cl-prolog::rulebase-predicate-tails
+                              (cl-prolog-kit::rulebase-predicate-tails
                                rulebase))))))))
 
 (deftest-source-loader-rolls-back
@@ -341,22 +341,22 @@
 (deftest source-loader-rolls-back-io-context-changes ()
   (let* ((original-output (make-string-output-stream))
          (transient-output (make-string-output-stream))
-         (context (cl-prolog::make-prolog-io-context
+         (context (cl-prolog-kit::make-prolog-io-context
                    :output original-output
                    :error-output (make-string-output-stream)))
-         (alias (cl-prolog::%prolog-atom-symbol "transient_output"))
+         (alias (cl-prolog-kit::%prolog-atom-symbol "transient_output"))
          (rulebase (make-rulebase :io-context context)))
     (with-closed-io-context (context)
-      (cl-prolog::%register-prolog-stream!
+      (cl-prolog-kit::%register-prolog-stream!
        context transient-output :output :alias alias)
       (signals-error
        (consult-prolog
         ":- initialization((set_output(transient_output), fail))."
         rulebase))
       (is (eq original-output
-              (cl-prolog::prolog-stream-stream
-               (cl-prolog::prolog-io-context-current-output
-                (cl-prolog::rulebase-io-context rulebase))))))))
+              (cl-prolog-kit::prolog-stream-stream
+               (cl-prolog-kit::prolog-io-context-current-output
+                (cl-prolog-kit::rulebase-io-context rulebase))))))))
 
 (deftest source-loader-rolls-back-operator-and-predicate-properties ()
   (let ((rulebase (make-rulebase)))
@@ -367,9 +367,9 @@
                :- dynamic(transient/1).~%~
                :- initialization(fail).")
       rulebase))
-    (is (null (cl-prolog::%operator-table-find
-               (cl-prolog::rulebase-operator-table rulebase)
-               'cl-prolog::transient)))
-    (is (null (cl-prolog::%rulebase-predicate-property
-               rulebase 'cl-prolog::transient 1)))))
+    (is (null (cl-prolog-kit::%operator-table-find
+               (cl-prolog-kit::rulebase-operator-table rulebase)
+               'cl-prolog-kit::transient)))
+    (is (null (cl-prolog-kit::%rulebase-predicate-property
+               rulebase 'cl-prolog-kit::transient 1)))))
 

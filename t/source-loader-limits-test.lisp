@@ -2,7 +2,7 @@
 ;;;; include splicing, symbol-interning avoidance on rejected directives, and
 ;;;; parser resource-error propagation through the direct API and consult/2.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (deftest source-loader-char-conversion-directive-affects-later-terms ()
   (let ((rulebase
@@ -44,9 +44,9 @@
             (consult-prolog
              (format nil ":- include(~A).~%outer(a spliced_op b)."
                      (%prolog-path-atom included)))))
-      (is-equal '(cl-prolog::outer (cl-prolog::spliced_op cl-prolog::a cl-prolog::b))
-                (cl-prolog::clause-head
-                 (first (cl-prolog::rulebase-visible-clauses rulebase)))))))
+      (is-equal '(cl-prolog-kit::outer (cl-prolog-kit::spliced_op cl-prolog-kit::a cl-prolog-kit::b))
+                (cl-prolog-kit::clause-head
+                 (first (cl-prolog-kit::rulebase-visible-clauses rulebase)))))))
 (deftest source-loader-accepts-a-zero-arity-predicate-with-an-explicit-body ()
   (let ((rulebase (consult-prolog "bar. foo :- bar.")))
     (is (%source-query-succeeds-p rulebase "foo."))))
@@ -54,7 +54,7 @@
   (dolist (entry '(("FX" :fx) ("FY" :fy) ("XF" :xf) ("YF" :yf)
                    ("XFX" :xfx) ("XFY" :xfy) ("YFX" :yfx)))
     (is (eq (second entry)
-            (cl-prolog::%operator-specifier-keyword
+            (cl-prolog-kit::%operator-specifier-keyword
              (make-symbol (first entry))))))
   (let ((before (package-owned-symbol-count '#:keyword)))
     (dotimes (index 128)
@@ -62,18 +62,18 @@
              (specifier (make-symbol name)))
         (is (null (nth-value 1 (find-symbol name '#:keyword))))
         (signals-error
-         (cl-prolog::%operator-specifier-keyword specifier))
+         (cl-prolog-kit::%operator-specifier-keyword specifier))
         (is (null (nth-value 1 (find-symbol name '#:keyword))))))
     (is-equal before (package-owned-symbol-count '#:keyword))))
 
 (deftest source-loader-missing-pathnames-do-not-intern-culprits ()
   (let* ((pathname (%temporary-prolog-pathname))
-         (resolved (cl-prolog::%resolve-prolog-source-pathname pathname))
+         (resolved (cl-prolog-kit::%resolve-prolog-source-pathname pathname))
          (name (namestring resolved)))
-    (is (null (nth-value 1 (find-symbol name '#:cl-prolog))))
+    (is (null (nth-value 1 (find-symbol name '#:cl-prolog-kit))))
     (handler-case
         (progn
-          (cl-prolog::with-prolog-source-errors (nil (cl-prolog::%iso-atom "CONSULT")) (consult-prolog pathname))
+          (cl-prolog-kit::with-prolog-source-errors (nil (cl-prolog-kit::%iso-atom "CONSULT")) (consult-prolog pathname))
           (error "Expected a missing source error."))
       (prolog-existence-error (condition)
         (let ((culprit
@@ -82,25 +82,25 @@
           (is-equal name (symbol-name culprit))
           (is-equal (%prolog-path-atom resolved)
                     (prolog-term-string culprit)))))
-    (is (null (nth-value 1 (find-symbol name '#:cl-prolog))))))
+    (is (null (nth-value 1 (find-symbol name '#:cl-prolog-kit))))))
 
 (deftest source-loader-syntax-descriptions-do-not-intern-culprits ()
-  (let ((before (package-owned-symbol-count '#:cl-prolog)))
+  (let ((before (package-owned-symbol-count '#:cl-prolog-kit)))
     (dotimes (index 32)
       (let ((description
               (format nil "Unexpected generated token ~D." index)))
         (handler-case
-            (cl-prolog::%raise-syntax-error
-             (make-condition 'cl-prolog::prolog-parse-error
+            (cl-prolog-kit::%raise-syntax-error
+             (make-condition 'cl-prolog-kit::prolog-parse-error
                              :description description)
-             nil 'cl-prolog::consult)
-          (cl-prolog::prolog-syntax-error (condition)
+             nil 'cl-prolog-kit::consult)
+          (cl-prolog-kit::prolog-syntax-error (condition)
             (let ((culprit
                     (second (second
                              (prolog-exception-term condition)))))
               (is (null (symbol-package culprit)))
               (is-equal description (symbol-name culprit)))))))
-    (is-equal before (package-owned-symbol-count '#:cl-prolog))))
+    (is-equal before (package-owned-symbol-count '#:cl-prolog-kit))))
 
 (deftest source-loader-preserves-parser-resource-errors-for-direct-api ()
   (with-temporary-prolog-files ((source "toolong."))
@@ -128,4 +128,4 @@
   (let ((sources (list (prolog-atom "cycle.pl"))))
     (setf (cdr sources) sources)
     (signals-error
-     (cl-prolog::%source-file-pathnames sources nil 'cl-prolog::consult))))
+     (cl-prolog-kit::%source-file-pathnames sources nil 'cl-prolog-kit::consult))))

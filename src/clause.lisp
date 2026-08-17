@@ -3,7 +3,7 @@
 ;;;; The rulebase container that holds stored clauses lives in data.lisp;
 ;;;; the predicate lookup layer lives in predicate-index.lisp.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defstruct (clause (:copier nil) (:constructor make-clause (head &optional (body (quote ())))))
   "A Horn clause. An empty BODY denotes a fact."

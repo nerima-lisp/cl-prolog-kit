@@ -4,7 +4,7 @@
 ;;;; contract directly and streams solutions as they are proven.  The other
 ;;;; entry points are conveniences layered on top of it.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %collect-query-variables (query)
   "Collect public variables, excluding variables scoped by FORALL/2."

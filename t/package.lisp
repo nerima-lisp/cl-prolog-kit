@@ -5,9 +5,9 @@
 ;;;; are manifests, and that is all this file is. The shared fixtures and
 ;;;; assertions it used to sit beside live in t/support/.
 
-(defpackage #:cl-prolog.tests
-  (:use #:cl #:cl-prolog #:cl-prolog/weave)
-  (:shadowing-import-from #:cl-prolog #:assert #:catch #:throw)
+(defpackage #:cl-prolog-kit.tests
+  (:use #:cl #:cl-prolog-kit #:cl-prolog-kit/weave)
+  (:shadowing-import-from #:cl-prolog-kit #:assert #:catch #:throw)
   (:export #:deftest
            #:deftest-table
            #:deftest-io-variants
@@ -22,4 +22,4 @@
            #:signals-prolog-condition
            #:make-family-rulebase))
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)

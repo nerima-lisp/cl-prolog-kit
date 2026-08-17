@@ -1,26 +1,26 @@
 # Examples
 
 The repository ships three runnable programs under `examples/`. They are loaded
-as the `cl-prolog/examples` ASDF system, which loads the library first and then
+as the `cl-prolog-kit/examples` ASDF system, which loads the library first and then
 executes all three files:
 
 ```sh
 sbcl --non-interactive \
   --eval '(require :asdf)' \
-  --eval '(asdf:load-asd (truename "cl-prolog.asd"))' \
-  --eval '(asdf:load-system :cl-prolog/examples)'
+  --eval '(asdf:load-asd (truename "cl-prolog-kit.asd"))' \
+  --eval '(asdf:load-system :cl-prolog-kit/examples)'
 ```
 
 !!! note "Not standalone scripts"
     The example files are **not** standalone scripts. Invoking one directly
-    with `sbcl --script` does not load the `cl-prolog` package. Load them
-    through the `cl-prolog/examples` system, which is also exercised by the
+    with `sbcl --script` does not load the `cl-prolog-kit` package. Load them
+    through the `cl-prolog-kit/examples` system, which is also exercised by the
     `checks.examples` Nix check ([Development](../project/development.md)).
 
 ## `quick-start.lisp` — the smallest useful program
 
 ```lisp
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (define-rulebase *family*
   ((parent tom bob))
@@ -38,7 +38,7 @@ returns every solution as a list of binding alists.
 ## `family-tree.lisp` — three ways to query
 
 ```lisp
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (define-rulebase *family*
   ((parent tom bob))
@@ -67,7 +67,7 @@ This is the program walked through step by step in
 ## `relational-lists.lisp` — list relations without any clauses
 
 ```lisp
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (let ((rulebase (make-rulebase)))
   (format t "~&append(?l ?r (a b c)) => ~S~%"

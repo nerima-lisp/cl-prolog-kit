@@ -2,7 +2,7 @@
 ;;;; canonicalizing source pathnames, opening source streams, and
 ;;;; translating parser/IO failures into ISO source-loading errors.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defvar *current-prolog-source-directory* nil)
 

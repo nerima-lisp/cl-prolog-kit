@@ -2,12 +2,12 @@
 ;;;;
 ;;;; Every assertion here is about one invariant: a Prolog atom IS its text.
 ;;;; Quoting it changes nothing (ISO 13211-1 6.4.2), case changes everything,
-;;;; and the representation the engine picks -- an upcased CL-PROLOG symbol, a
-;;;; verbatim CL-PROLOG.VERBATIM-ATOMS symbol, or NIL for `[]' -- must never be
+;;;; and the representation the engine picks -- an upcased CL-PROLOG-KIT symbol, a
+;;;; verbatim CL-PROLOG-KIT.VERBATIM-ATOMS symbol, or NIL for `[]' -- must never be
 ;;;; observable through unification, `==/2', the standard order, the writer, or
 ;;;; the text-conversion builtins.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 ;;; Quoting is invisible: ISO 13211-1 6.4.2 makes a quoted token and the
 ;;; equivalent name token the same atom.
@@ -140,7 +140,7 @@ tokens, so quoting them would be noise.  The exceptions each have a reason —
   ;; write/1 is unquoted, so it shows the bare text either way.
   (is-equal "FooBar"
             (with-output-to-string (stream)
-              (cl-prolog::%write-prolog-term-with-options
+              (cl-prolog-kit::%write-prolog-term-with-options
                (prolog-atom "FooBar") stream :quoted nil))))
 
 (deftest numbervars-functor-is-the-upper-case-dollar-var ()
@@ -148,11 +148,11 @@ tokens, so quoting them would be noise.  The exceptions each have a reason —
 `'$var'' must be written as an ordinary compound instead of as a variable name."
   (is-equal "A"
             (with-output-to-string (stream)
-              (cl-prolog::%write-prolog-term-with-options
+              (cl-prolog-kit::%write-prolog-term-with-options
                (list (prolog-atom "$VAR") 0) stream :numbervars t)))
   (is-equal "'$var'(0)"
             (with-output-to-string (stream)
-              (cl-prolog::%write-prolog-term-with-options
+              (cl-prolog-kit::%write-prolog-term-with-options
                (list (prolog-atom "$var") 0) stream :numbervars t))))
 
 ;;; Representation details the rest of the engine must not leak.
@@ -171,24 +171,24 @@ a quoted atom that starts with `?' must stay an atom in both encodings."
   (let ((culprit (make-symbol "/Users/Someone/Data.pl")))
     (is (not (logic-var-p culprit)))
     (is-equal "/Users/Someone/Data.pl" (prolog-atom-text culprit))
-    (is (cl-prolog::%same-atom-text-p
+    (is (cl-prolog-kit::%same-atom-text-p
          culprit (prolog-atom "/Users/Someone/Data.pl")))))
 
 (deftest equal-text-atoms-agree-across-unify-identity-and-order ()
   "The three ways to ask whether two atoms are the same must never disagree."
-  (dolist (pair (list (list (prolog-atom "hello") 'cl-prolog::hello)
-                      (list (intern "LIST" '#:cl-prolog.user-atoms) 'cl:list)
+  (dolist (pair (list (list (prolog-atom "hello") 'cl-prolog-kit::hello)
+                      (list (intern "LIST" '#:cl-prolog-kit.user-atoms) 'cl:list)
                       (list (make-symbol "SHARED") (make-symbol "SHARED"))))
     (destructuring-bind (left right) pair
       (is (nth-value 1 (unify left right)))
-      (is (cl-prolog::%term-identical-p left right))
-      (is (= 0 (cl-prolog::%compare-terms left right)))))
-  (dolist (pair (list (list (prolog-atom "ABC") 'cl-prolog::abc)
-                      (list (prolog-atom "fooBar") 'cl-prolog::foobar)))
+      (is (cl-prolog-kit::%term-identical-p left right))
+      (is (= 0 (cl-prolog-kit::%compare-terms left right)))))
+  (dolist (pair (list (list (prolog-atom "ABC") 'cl-prolog-kit::abc)
+                      (list (prolog-atom "fooBar") 'cl-prolog-kit::foobar)))
     (destructuring-bind (left right) pair
       (is (not (nth-value 1 (unify left right))))
-      (is (not (cl-prolog::%term-identical-p left right)))
-      (is (not (= 0 (cl-prolog::%compare-terms left right)))))))
+      (is (not (cl-prolog-kit::%term-identical-p left right)))
+      (is (not (= 0 (cl-prolog-kit::%compare-terms left right)))))))
 
 (cl-weave:it-property
     "an atom's text survives PROLOG-ATOM and a writeq/read round trip"

@@ -2,7 +2,7 @@
 ;;;; text, built on top of the token stream produced by lexer.lisp, plus
 ;;;; the public read-prolog-term/read-prolog-clause/parse-prolog API.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %current-token (parser)
   (aref (%parser-tokens parser) (%parser-position parser)))
@@ -33,10 +33,10 @@ vector carries, so a caller never has to bounds-check its lookahead."
       (%current-token parser))))
 
 (defun %prolog-symbol (name &key (position 0) track-resource-p)
-  "Intern NAME as an engine-internal CL-PROLOG symbol (an operator or control
+  "Intern NAME as an engine-internal CL-PROLOG-KIT symbol (an operator or control
 functor), which is always the upcased spelling."
   (let ((canonical-name (string-upcase name))
-        (package (find-package '#:cl-prolog)))
+        (package (find-package '#:cl-prolog-kit)))
     (if track-resource-p
         (%intern-parser-symbol canonical-name package position)
         (intern canonical-name package))))
@@ -60,7 +60,7 @@ the text/symbol mapping this uses; quoting is not part of it, so `'foo'' and
           (setf (gethash name variables)
                 (%intern-parser-symbol
                  (concatenate 'string "?" (string-upcase name))
-                 (find-package '#:cl-prolog)
+                 (find-package '#:cl-prolog-kit)
                  position)))))
 
 (defun %operator-definition-for-token (parser token specifiers)

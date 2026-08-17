@@ -2,7 +2,7 @@
 ;;;; removal, and replaying/restoring the operator, predicate-property,
 ;;;; and table-declaration effects recorded by source-directives.lisp.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %remove-source-clauses! (rulebase canonical)
   (multiple-value-bind (revision entries) (%rulebase-snapshot rulebase)

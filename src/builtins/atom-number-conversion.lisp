@@ -2,7 +2,7 @@
 ;;;; atom_chars/2, atom_codes/2, char_code/2, number_chars/2,
 ;;;; number_codes/2, atom_number/2.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defmacro define-atom-list-conversion (name list-to-text atom-to-list)
   `(define-iso-builtin (,name atom list) ,(string-upcase (symbol-name name))

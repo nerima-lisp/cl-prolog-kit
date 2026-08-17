@@ -3,8 +3,8 @@
 ;;;; A small notation for describing call edges outside of Lisp source,
 ;;;; e.g. "main -> helper, helper -> leaf", useful for fixtures and for
 ;;;; hand-authored call-graph descriptions. The grammar itself is defined
-;;;; with CL-PROLOG:DEF-DCG-RULE and used purely as a *recognizer*
-;;;; (EDGE-SPEC-WELL-FORMED-P) via CL-PROLOG:PHRASE-ALL: CL-PROLOG:DCG-STAR
+;;;; with CL-PROLOG-KIT:DEF-DCG-RULE and used purely as a *recognizer*
+;;;; (EDGE-SPEC-WELL-FORMED-P) via CL-PROLOG-KIT:PHRASE-ALL: CL-PROLOG-KIT:DCG-STAR
 ;;;; emits its shortest (zero-repetition) match first, so the caller must
 ;;;; scan every returned remainder for NIL (full consumption) rather than
 ;;;; trust the first solution. Structured extraction of the parsed pairs is
@@ -13,7 +13,7 @@
 ;;;; stream, not an accumulator, and a side-effecting accumulator would
 ;;;; double-count values across the grammar's own backtracking attempts.
 
-(in-package #:cl-prolog/callgraph)
+(in-package #:cl-prolog-kit/callgraph)
 
 (defun tokenize-edge-spec (spec)
   "Tokenize a string like \"main -> helper, helper -> leaf\" into a list of
@@ -42,23 +42,23 @@ tokens: (:ID . NAME), :ARROW, and :COMMA."
     (nreverse tokens)))
 
 (defvar *edge-grammar-rulebase*
-  (cl-prolog:rulebase-extend
-   (cl-prolog:make-rulebase)
-   (list (cl-prolog:def-dcg-rule edge
-           (cl-prolog:dcg-token-match-value :id ?caller)
+  (cl-prolog-kit:rulebase-extend
+   (cl-prolog-kit:make-rulebase)
+   (list (cl-prolog-kit:def-dcg-rule edge
+           (cl-prolog-kit:dcg-token-match-value :id ?caller)
            (terminal :arrow)
-           (cl-prolog:dcg-token-match-value :id ?callee))
-         (cl-prolog:def-dcg-rule edge-tail
+           (cl-prolog-kit:dcg-token-match-value :id ?callee))
+         (cl-prolog-kit:def-dcg-rule edge-tail
            (terminal :comma)
            edge)
-         (cl-prolog:def-dcg-rule edge-list
+         (cl-prolog-kit:def-dcg-rule edge-list
            edge
-           (cl-prolog:dcg-star edge-tail))))
+           (cl-prolog-kit:dcg-star edge-tail))))
   "Grammar: EDGE-LIST --> EDGE (',' EDGE)*, where EDGE --> ID '->' ID.")
 
 (defun edge-spec-well-formed-p (tokens)
   "True when TOKENS is a complete parse of the EDGE-LIST grammar."
-  (let ((remainders (cl-prolog:phrase-all *edge-grammar-rulebase* 'edge-list tokens)))
+  (let ((remainders (cl-prolog-kit:phrase-all *edge-grammar-rulebase* 'edge-list tokens)))
     (not (null (member nil remainders :test #'equal)))))
 
 (defun parse-edge-spec (spec)

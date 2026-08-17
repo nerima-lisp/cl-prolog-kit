@@ -1,4 +1,4 @@
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %existential-marker-p (goal)
   "True when GOAL is a `^'/2 term, whatever spelling reached the engine."

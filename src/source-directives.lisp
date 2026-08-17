@@ -3,7 +3,7 @@
 ;;;; load_files/include directives, and recording their effects so
 ;;;; source-rollback.lisp can undo a reload.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %prolog-query-term-p (term)
   "True when TERM is a bare query (?- Goal), which is not a consultable

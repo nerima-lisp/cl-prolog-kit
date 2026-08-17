@@ -2,7 +2,7 @@
 ;;;; creation-order bookkeeping that gives every variable a stable ordinal
 ;;;; within a query.  Independent of unification and environment indexing.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defvar *logic-variable-ordinals* nil)
 

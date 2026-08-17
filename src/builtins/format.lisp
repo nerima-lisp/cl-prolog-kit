@@ -8,7 +8,7 @@
 ;;;; is treated as a single-element list, as SWI does).  Malformed directives
 ;;;; and out-of-range values raise catchable ISO errors.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %format-source-text (term environment operation)
   "Resolve a format-string argument to a Lisp string."

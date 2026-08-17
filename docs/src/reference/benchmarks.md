@@ -25,11 +25,11 @@ first-call compilation.
 
 ## Cross-engine comparison
 
-`benchmarks/external-comparison.sh` cross-checks cl-prolog against
+`benchmarks/external-comparison.sh` cross-checks cl-prolog-kit against
 [SWI-Prolog](https://www.swi-prolog.org/),
 [Trealla](https://github.com/trealla-prolog/trealla), and
 [Scryer Prolog](https://github.com/mthom/scryer-prolog) on a shared workload
-(`benchmarks/external-workload.pl` and `benchmarks/external-cl-prolog.lisp`):
+(`benchmarks/external-workload.pl` and `benchmarks/external-cl-prolog-kit.lisp`):
 
 ```sh
 ITERATIONS=5000 benchmarks/external-comparison.sh

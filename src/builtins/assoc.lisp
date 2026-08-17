@@ -8,7 +8,7 @@
 ;;;; type -- see docs/src/reference/semantics.md.)  Keys are compared with %COMPARE-TERMS,
 ;;;; so any ground term may be a key.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %assoc-functor () (%text-atom "assoc"))
 (defun %pair-functor () (%text-atom "-"))

@@ -1,36 +1,36 @@
 ;;;; Engine surface, data model, and macro behavior tests.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (deftest-table package-surface ()
-  (:is (find-package "CL-PROLOG"))
-  (:exported "PROLOG" "CL-PROLOG")
-  (:exported "QUERY-PROLOG" "CL-PROLOG")
-  (:exported "MAP-PROLOG-SOLUTIONS" "CL-PROLOG")
-  (:not-exported "DEFINE-BUILTIN" "CL-PROLOG")
-  (:exported "DEF-RULE" "CL-PROLOG")
-  (:exported "PHRASE" "CL-PROLOG")
-  (:exported "UNIFY" "CL-PROLOG")
-  (:exported "LOGIC-SUBSTITUTE" "CL-PROLOG")
-  (:exported "FRESH-LOGIC-VARIABLE" "CL-PROLOG")
-  (:exported "RULEBASE-VISIBLE-CLAUSES" "CL-PROLOG")
-  (:exported "COPY-RULEBASE" "CL-PROLOG")
-  (:exported "RULEBASE-EXTEND" "CL-PROLOG")
-  (:not-exported "RULEBASE-CLAUSES" "CL-PROLOG")
-  (:not-exported "RULEBASE-REMOVE-CLAUSE!" "CL-PROLOG")
-  (:exported "TERM_VARIABLES" "CL-PROLOG")
-  (:not-exported "TERM-VARIABLES" "CL-PROLOG")
-  (:exported "COPY_TERM" "CL-PROLOG")
-  (:exported "UNIFY_WITH_OCCURS_CHECK" "CL-PROLOG")
-  (:not-exported "COPY-TERM" "CL-PROLOG")
-  (:exported "INVALID-GOAL-ERROR" "CL-PROLOG")
-  (:not-exported "SUBSTITUTE-TERM" "CL-PROLOG")
-  (:not-exported "*MAX-PROOF-DEPTH*" "CL-PROLOG")
-  (:not-exported "UNIFY-FAILED-P" "CL-PROLOG")
-  (:not-exported "WHEN-UNIFY-SUCCEEDS" "CL-PROLOG")
-  (:not-exported "WHEN-UNIFY-FAILS" "CL-PROLOG")
-  (:not-exported "QUERY-PROLOG-CPS" "CL-PROLOG")
-  (:not-exported "PROLOG-SUCCEEDS-P-CPS" "CL-PROLOG")
+  (:is (find-package "CL-PROLOG-KIT"))
+  (:exported "PROLOG" "CL-PROLOG-KIT")
+  (:exported "QUERY-PROLOG" "CL-PROLOG-KIT")
+  (:exported "MAP-PROLOG-SOLUTIONS" "CL-PROLOG-KIT")
+  (:not-exported "DEFINE-BUILTIN" "CL-PROLOG-KIT")
+  (:exported "DEF-RULE" "CL-PROLOG-KIT")
+  (:exported "PHRASE" "CL-PROLOG-KIT")
+  (:exported "UNIFY" "CL-PROLOG-KIT")
+  (:exported "LOGIC-SUBSTITUTE" "CL-PROLOG-KIT")
+  (:exported "FRESH-LOGIC-VARIABLE" "CL-PROLOG-KIT")
+  (:exported "RULEBASE-VISIBLE-CLAUSES" "CL-PROLOG-KIT")
+  (:exported "COPY-RULEBASE" "CL-PROLOG-KIT")
+  (:exported "RULEBASE-EXTEND" "CL-PROLOG-KIT")
+  (:not-exported "RULEBASE-CLAUSES" "CL-PROLOG-KIT")
+  (:not-exported "RULEBASE-REMOVE-CLAUSE!" "CL-PROLOG-KIT")
+  (:exported "TERM_VARIABLES" "CL-PROLOG-KIT")
+  (:not-exported "TERM-VARIABLES" "CL-PROLOG-KIT")
+  (:exported "COPY_TERM" "CL-PROLOG-KIT")
+  (:exported "UNIFY_WITH_OCCURS_CHECK" "CL-PROLOG-KIT")
+  (:not-exported "COPY-TERM" "CL-PROLOG-KIT")
+  (:exported "INVALID-GOAL-ERROR" "CL-PROLOG-KIT")
+  (:not-exported "SUBSTITUTE-TERM" "CL-PROLOG-KIT")
+  (:not-exported "*MAX-PROOF-DEPTH*" "CL-PROLOG-KIT")
+  (:not-exported "UNIFY-FAILED-P" "CL-PROLOG-KIT")
+  (:not-exported "WHEN-UNIFY-SUCCEEDS" "CL-PROLOG-KIT")
+  (:not-exported "WHEN-UNIFY-FAILS" "CL-PROLOG-KIT")
+  (:not-exported "QUERY-PROLOG-CPS" "CL-PROLOG-KIT")
+  (:not-exported "PROLOG-SUCCEEDS-P-CPS" "CL-PROLOG-KIT")
   (:is (logic-var-p '?x))
   (:is (logic-var-p (fresh-logic-variable)))
   (:is-not (logic-var-p :?keyword))
@@ -79,79 +79,79 @@
                   (list (first remaining))
                   (list (list (second remaining))))))
          (rulebase (make-rulebase :clauses clauses))
-         (session (cl-prolog::%make-rulebase-table-session rulebase))
-         (state (cl-prolog::%make-proof-state
+         (session (cl-prolog-kit::%make-rulebase-table-session rulebase))
+         (state (cl-prolog-kit::%make-proof-state
   rulebase
   (quote ())
-  (cl-prolog::%make-environment-index (quote ()))
+  (cl-prolog-kit::%make-environment-index (quote ()))
   nil
-  cl-prolog::+default-prolog-module+
+  cl-prolog-kit::+default-prolog-module+
   session
-  (cl-prolog::%make-cut-tag)))
+  (cl-prolog-kit::%make-cut-tag)))
          (second-session
-           (cl-prolog::%make-rulebase-table-session rulebase))
+           (cl-prolog-kit::%make-rulebase-table-session rulebase))
          (second-state
-           (cl-prolog::%make-proof-state
+           (cl-prolog-kit::%make-proof-state
   rulebase
   (quote ())
-  (cl-prolog::%make-environment-index (quote ()))
+  (cl-prolog-kit::%make-environment-index (quote ()))
   nil
-  cl-prolog::+default-prolog-module+
+  cl-prolog-kit::+default-prolog-module+
   second-session
-  (cl-prolog::%make-cut-tag)))
+  (cl-prolog-kit::%make-cut-tag)))
          (root-goal (list root-predicate))
          (last-goal (list last-predicate))
-         (first-snapshot (cl-prolog::%proof-module-entries state)))
-    (is (eq first-snapshot (cl-prolog::%proof-module-entries state)))
+         (first-snapshot (cl-prolog-kit::%proof-module-entries state)))
+    (is (eq first-snapshot (cl-prolog-kit::%proof-module-entries state)))
     (is-equal 0
               (hash-table-count
-               (cl-prolog::rulebase-left-recursion-analysis rulebase)))
-    (is (not (cl-prolog::%left-recursive-p root-goal state)))
+               (cl-prolog-kit::rulebase-left-recursion-analysis rulebase)))
+    (is (not (cl-prolog-kit::%left-recursive-p root-goal state)))
     (is-equal 1
               (hash-table-count
-               (cl-prolog::rulebase-left-recursion-analysis rulebase)))
-    (is (not (cl-prolog::%left-recursive-p last-goal second-state)))
+               (cl-prolog-kit::rulebase-left-recursion-analysis rulebase)))
+    (is (not (cl-prolog-kit::%left-recursive-p last-goal second-state)))
     (is-equal 1
               (hash-table-count
-               (cl-prolog::rulebase-left-recursion-analysis rulebase)))
+               (cl-prolog-kit::rulebase-left-recursion-analysis rulebase)))
     (let* ((copy (copy-rulebase rulebase))
            (copy-session
-             (cl-prolog::%make-rulebase-table-session copy))
+             (cl-prolog-kit::%make-rulebase-table-session copy))
            (copy-state
-             (cl-prolog::%make-proof-state
+             (cl-prolog-kit::%make-proof-state
   copy
   (quote ())
-  (cl-prolog::%make-environment-index (quote ()))
+  (cl-prolog-kit::%make-environment-index (quote ()))
   nil
-  cl-prolog::+default-prolog-module+
+  cl-prolog-kit::+default-prolog-module+
   copy-session
-  (cl-prolog::%make-cut-tag))))
-      (is (not (eq (cl-prolog::rulebase-left-recursion-analysis rulebase)
-                   (cl-prolog::rulebase-left-recursion-analysis copy))))
+  (cl-prolog-kit::%make-cut-tag))))
+      (is (not (eq (cl-prolog-kit::rulebase-left-recursion-analysis rulebase)
+                   (cl-prolog-kit::rulebase-left-recursion-analysis copy))))
       (is-equal 0
                 (hash-table-count
-                 (cl-prolog::rulebase-left-recursion-analysis copy)))
-      (is (not (cl-prolog::%left-recursive-p root-goal copy-state)))
+                 (cl-prolog-kit::rulebase-left-recursion-analysis copy)))
+      (is (not (cl-prolog-kit::%left-recursive-p root-goal copy-state)))
       (is-equal 1
                 (hash-table-count
-                 (cl-prolog::rulebase-left-recursion-analysis copy)))
+                 (cl-prolog-kit::rulebase-left-recursion-analysis copy)))
       (is-equal 1
                 (hash-table-count
-                 (cl-prolog::rulebase-left-recursion-analysis rulebase))))
+                 (cl-prolog-kit::rulebase-left-recursion-analysis rulebase))))
     (rulebase-insert-clause!
      rulebase
      (make-clause last-goal (list root-goal)))
     (is-equal 0
               (hash-table-count
-               (cl-prolog::rulebase-left-recursion-analysis rulebase)))
-    (let ((next-snapshot (cl-prolog::%proof-module-entries state)))
+               (cl-prolog-kit::rulebase-left-recursion-analysis rulebase)))
+    (let ((next-snapshot (cl-prolog-kit::%proof-module-entries state)))
       (is (not (eq first-snapshot next-snapshot)))
       (is-equal (1+ (length first-snapshot)) (length next-snapshot)))
-    (is (cl-prolog::%left-recursive-p root-goal state))
-    (is (cl-prolog::%left-recursive-p last-goal second-state))
+    (is (cl-prolog-kit::%left-recursive-p root-goal state))
+    (is (cl-prolog-kit::%left-recursive-p last-goal second-state))
     (is-equal 1
               (hash-table-count
-               (cl-prolog::rulebase-left-recursion-analysis rulebase)))))
+               (cl-prolog-kit::rulebase-left-recursion-analysis rulebase)))))
 
 (deftest-table rulebase-default-constructors ()
   (:equal '() (clause-body (make-clause '(lonely))))
@@ -161,21 +161,21 @@
   (let* ((first-source #p"/canonical/first.pl")
          (second-source #p"/canonical/second.pl")
          (rulebase (make-rulebase)))
-    (cl-prolog::%set-rulebase-source-state! rulebase first-source :loaded)
-    (let ((transaction (cl-prolog::%copy-rulebase rulebase)))
-      (cl-prolog::%set-rulebase-source-state! transaction first-source :loading)
-      (cl-prolog::%set-rulebase-source-state! transaction second-source :loaded)
+    (cl-prolog-kit::%set-rulebase-source-state! rulebase first-source :loaded)
+    (let ((transaction (cl-prolog-kit::%copy-rulebase rulebase)))
+      (cl-prolog-kit::%set-rulebase-source-state! transaction first-source :loading)
+      (cl-prolog-kit::%set-rulebase-source-state! transaction second-source :loaded)
       (is-equal :loaded
-                (cl-prolog::%rulebase-source-state rulebase first-source))
+                (cl-prolog-kit::%rulebase-source-state rulebase first-source))
       (multiple-value-bind (state present-p)
-          (cl-prolog::%rulebase-source-state rulebase second-source)
+          (cl-prolog-kit::%rulebase-source-state rulebase second-source)
         (is-equal nil state)
         (is (not present-p)))
-      (cl-prolog::%replace-rulebase! rulebase transaction)
+      (cl-prolog-kit::%replace-rulebase! rulebase transaction)
       (is-equal :loading
-                (cl-prolog::%rulebase-source-state rulebase first-source))
+                (cl-prolog-kit::%rulebase-source-state rulebase first-source))
       (is-equal :loaded
-                (cl-prolog::%rulebase-source-state rulebase second-source)))))
+                (cl-prolog-kit::%rulebase-source-state rulebase second-source)))))
 
 (deftest-table prolog-invalid-clauses-signal ()
   (:signals (macroexpand-1 '(prolog (:facts (parent tom bob))))
@@ -216,40 +216,40 @@
 (deftest rulebase-extension-preserves-complete-state ()
   (let ((base (prolog ((color apple red)))))
     (setf (gethash '(user marked 1)
-                   (cl-prolog::rulebase-predicate-properties base))
+                   (cl-prolog-kit::rulebase-predicate-properties base))
           :dynamic
-          (gethash 'dialect (cl-prolog::rulebase-prolog-flag-values base))
-          :cl-prolog
-          (gethash #\a (cl-prolog::rulebase-char-conversions base))
+          (gethash 'dialect (cl-prolog-kit::rulebase-prolog-flag-values base))
+          :cl-prolog-kit
+          (gethash #\a (cl-prolog-kit::rulebase-char-conversions base))
           #\b
-          (gethash #P"fixture.pl" (cl-prolog::rulebase-source-registry base))
-          (cl-prolog::%make-source-record :loaded))
+          (gethash #P"fixture.pl" (cl-prolog-kit::rulebase-source-registry base))
+          (cl-prolog-kit::%make-source-record :loaded))
     (let ((extended (extend-rulebase base ((color apple green)))))
       (is-equal '(((?shade . green)) ((?shade . red)))
                 (query-prolog extended '(color apple ?shade)))
-      (is (eq (cl-prolog::rulebase-operator-table base)
-              (cl-prolog::rulebase-operator-table extended)))
-      (is (not (eq (cl-prolog::rulebase-predicate-properties base)
-                   (cl-prolog::rulebase-predicate-properties extended))))
+      (is (eq (cl-prolog-kit::rulebase-operator-table base)
+              (cl-prolog-kit::rulebase-operator-table extended)))
+      (is (not (eq (cl-prolog-kit::rulebase-predicate-properties base)
+                   (cl-prolog-kit::rulebase-predicate-properties extended))))
       (is-equal :dynamic
                 (gethash '(user marked 1)
-                         (cl-prolog::rulebase-predicate-properties extended)))
-      (is (not (eq (cl-prolog::rulebase-io-context base)
-                   (cl-prolog::rulebase-io-context extended))))
-      (is (not (eq (cl-prolog::rulebase-module-registry base)
-                   (cl-prolog::rulebase-module-registry extended))))
-      (is (not (eq (cl-prolog::rulebase-source-registry base)
-                   (cl-prolog::rulebase-source-registry extended))))
+                         (cl-prolog-kit::rulebase-predicate-properties extended)))
+      (is (not (eq (cl-prolog-kit::rulebase-io-context base)
+                   (cl-prolog-kit::rulebase-io-context extended))))
+      (is (not (eq (cl-prolog-kit::rulebase-module-registry base)
+                   (cl-prolog-kit::rulebase-module-registry extended))))
+      (is (not (eq (cl-prolog-kit::rulebase-source-registry base)
+                   (cl-prolog-kit::rulebase-source-registry extended))))
       (is-equal :loaded
-                (cl-prolog::%source-record-state
+                (cl-prolog-kit::%source-record-state
                  (gethash #P"fixture.pl"
-                          (cl-prolog::rulebase-source-registry extended))))
-      (is-equal :cl-prolog
+                          (cl-prolog-kit::rulebase-source-registry extended))))
+      (is-equal :cl-prolog-kit
                 (gethash 'dialect
-                         (cl-prolog::rulebase-prolog-flag-values extended)))
+                         (cl-prolog-kit::rulebase-prolog-flag-values extended)))
       (is-equal #\b
                 (gethash #\a
-                         (cl-prolog::rulebase-char-conversions extended))))))
+                         (cl-prolog-kit::rulebase-char-conversions extended))))))
 
 (deftest query-first-distinguishes-ground-success-from-failure ()
   (let ((rulebase (prolog ((ready))
@@ -300,10 +300,10 @@
     (is (not (prolog-succeeds-p rb '(constant-no))))))
 
 (deftest when-guard-shape-is-strict ()
-  (is (cl-prolog::%when-guard-p '(:when (> ?n 1))))
-  (is (not (cl-prolog::%when-guard-p '(:when))))
-  (is (not (cl-prolog::%when-guard-p '(:when f ?x))))
-  (is (not (cl-prolog::%when-guard-p 'ready)))
+  (is (cl-prolog-kit::%when-guard-p '(:when (> ?n 1))))
+  (is (not (cl-prolog-kit::%when-guard-p '(:when))))
+  (is (not (cl-prolog-kit::%when-guard-p '(:when f ?x))))
+  (is (not (cl-prolog-kit::%when-guard-p 'ready)))
   (let ((rb (prolog
               ((ready))
               ((launchable) ready))))

@@ -1,4 +1,4 @@
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %io-context-atom (name)
   "Intern an I/O protocol atom without depending on the parser layer."

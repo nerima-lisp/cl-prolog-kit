@@ -10,9 +10,9 @@ entry point.
 
 ```lisp
 (require :asdf)
-(asdf:load-asd (truename "cl-prolog.asd")) ; run from the repository root
-(asdf:load-system :cl-prolog)
-(in-package #:cl-prolog)
+(asdf:load-asd (truename "cl-prolog-kit.asd")) ; run from the repository root
+(asdf:load-system :cl-prolog-kit)
+(in-package #:cl-prolog-kit)
 ```
 
 ## 2. State the facts

@@ -1,4 +1,4 @@
-;;;; The Lisp-level entry point for the cl-prolog coverage report.
+;;;; The Lisp-level entry point for the cl-prolog-kit coverage report.
 ;;;;
 ;;;;     sbcl --script run-coverage.lisp [report-directory]
 ;;;;
@@ -7,8 +7,8 @@
 ;;;; checks.coverage invokes exactly this script so the local command and the
 ;;;; CI gate cannot drift apart.
 ;;;;
-;;;; The project-owned :cl-prolog, :cl-prolog/weave, and
-;;;; :cl-prolog/callgraph systems are compiled with SB-COVER's instrumentation
+;;;; The project-owned :cl-prolog-kit, :cl-prolog-kit/weave, and
+;;;; :cl-prolog-kit/callgraph systems are compiled with SB-COVER's instrumentation
 ;;;; on. cl-weave is loaded before coverage is enabled, while both test systems
 ;;;; load after it is disabled, so neither external harness code nor tests enter
 ;;;; the report.
@@ -21,24 +21,24 @@
 
 (let ((root
       (make-pathname :name nil :type nil :version nil :defaults *load-truename*)))
-  (asdf:load-asd (merge-pathnames "cl-prolog.asd" root)))
+  (asdf:load-asd (merge-pathnames "cl-prolog-kit.asd" root)))
 
 (progn
   (asdf:load-system "cl-weave")
   (declaim (optimize sb-cover:store-coverage-data))
-  (asdf:load-system "cl-prolog" :force t)
-  (asdf:load-system "cl-prolog/weave" :force t)
-  (asdf:load-system "cl-prolog/callgraph" :force t))
+  (asdf:load-system "cl-prolog-kit" :force t)
+  (asdf:load-system "cl-prolog-kit/weave" :force t)
+  (asdf:load-system "cl-prolog-kit/callgraph" :force t))
 
 (declaim (optimize (sb-cover:store-coverage-data 0)))
 
 ;; Both systems register tests globally in cl-weave, so load them before the
 ;; single aggregate run and reject a red suite before writing the report.
 (progn
-  (asdf:load-system "cl-prolog/test")
-  (asdf:load-system "cl-prolog/callgraph/test")
+  (asdf:load-system "cl-prolog-kit/test")
+  (asdf:load-system "cl-prolog-kit/callgraph/test")
   (unless (uiop:symbol-call "CL-WEAVE" "RUN-ALL" :reporter :spec)
-    (error "cl-prolog cl-weave test suites failed.")))
+    (error "cl-prolog-kit cl-weave test suites failed.")))
 
 (let* ((argument (second sb-ext:*posix-argv*))
        (report-directory

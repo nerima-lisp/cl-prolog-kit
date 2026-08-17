@@ -1,6 +1,6 @@
 ;;;; ISO operator declaration and enumeration predicates.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %operator-priority (term environment operation &key allow-variable)
   (let ((value (logic-substitute term environment)))

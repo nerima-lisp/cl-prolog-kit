@@ -5,7 +5,7 @@
 ;;;; (findall/bagof/setof) that consumes %STANDARD-TERM-SORT-UNIQUE from here.
 ;;;; assoc.lisp also depends on %PROLOG-TERM<.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %prolog-term< (left right)
   "Compare terms using the standard Prolog order."

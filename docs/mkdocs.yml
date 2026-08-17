@@ -1,18 +1,18 @@
-# cl-prolog documentation — MkDocs + Material configuration.
+# cl-prolog-kit documentation — MkDocs + Material configuration.
 #
 # Build:   mkdocs build -f docs/mkdocs.yml --strict
 # Serve:   mkdocs serve  -f docs/mkdocs.yml
 # The Nix flake (`nix build .#docs`) drives the same config offline.
 
-site_name: cl-prolog
+site_name: cl-prolog-kit
 site_description: >-
   A small, dependency-free Prolog engine for Common Lisp — macro-first rule
   definition, CPS proof search, and a compact, extensible builtin set.
-site_author: cl-prolog contributors
-site_url: https://nerima-lisp.github.io/cl-prolog/
+site_author: cl-prolog-kit contributors
+site_url: https://nerima-lisp.github.io/cl-prolog-kit/
 
-repo_name: nerima-lisp/cl-prolog
-repo_url: https://github.com/nerima-lisp/cl-prolog
+repo_name: nerima-lisp/cl-prolog-kit
+repo_url: https://github.com/nerima-lisp/cl-prolog-kit
 edit_uri: edit/main/docs/src/
 
 # Content lives in docs/src (kept from the previous mdBook layout).
@@ -26,7 +26,7 @@ use_directory_urls: true
 # while drafting.
 strict: true
 
-copyright: Copyright &copy; cl-prolog contributors — MIT License
+copyright: Copyright &copy; cl-prolog-kit contributors — MIT License
 
 theme:
   name: material
@@ -79,8 +79,8 @@ theme:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/nerima-lisp/cl-prolog
-      name: cl-prolog on GitHub
+      link: https://github.com/nerima-lisp/cl-prolog-kit
+      name: cl-prolog-kit on GitHub
   generator: false
 
 plugins:

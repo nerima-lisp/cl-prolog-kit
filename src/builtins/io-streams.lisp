@@ -1,6 +1,6 @@
 ;;;; ISO stream read/write builtins.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %io-read-term-values (entry operator-table mode environment operation)
   (let ((input (prolog-stream-stream entry)))

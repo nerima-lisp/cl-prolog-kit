@@ -1,4 +1,4 @@
-;;;; callgraph/test/package.lisp - cl-weave test package for cl-prolog/callgraph
+;;;; callgraph/test/package.lisp - cl-weave test package for cl-prolog-kit/callgraph
 ;;;;
 ;;;; CL-WEAVE:DESCRIBE shadows CL:DESCRIBE, so it must be imported with
 ;;;; :SHADOWING-IMPORT-FROM rather than :USE — the same convention cl-weave
@@ -6,8 +6,8 @@
 ;;;; and the convention nerima-lisp/cl-cc's packages/prolog-tools/tests used
 ;;;; for this same code before the split.
 
-(defpackage #:cl-prolog/callgraph/test
-  (:use #:cl #:cl-prolog/callgraph)
+(defpackage #:cl-prolog-kit/callgraph/test
+  (:use #:cl #:cl-prolog-kit/callgraph)
   (:shadowing-import-from #:cl-weave #:describe)
   (:import-from #:cl-weave
    #:it

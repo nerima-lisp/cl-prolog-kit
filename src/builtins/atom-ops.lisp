@@ -1,6 +1,6 @@
 ;;;; Atom-text builtins: atom_length/2, atom_concat/3, sub_atom/5.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (define-iso-builtin (atom_length atom length) "ATOM_LENGTH"
   (%ensure-atom-value resolved-atom environment operation "atom_length/2 atom")

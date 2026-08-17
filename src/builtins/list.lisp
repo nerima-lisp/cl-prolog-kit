@@ -1,4 +1,4 @@
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %unify-sequence (pairs environment continuation)
   "Unify PAIRS from left to right, then invoke CONTINUATION."

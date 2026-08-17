@@ -3,7 +3,7 @@
 ;;;; directive evaluation in source-directives.lisp, and the rollback
 ;;;; support in source-rollback.lisp.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defmacro with-prolog-loading-transaction ((rulebase transaction initializations)
                                            &body body)

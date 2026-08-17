@@ -3,7 +3,7 @@
 ;;;; transitions that derive one state from another.  The search algorithm
 ;;;; that drives these transitions lives in prover.lisp.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defvar *current-prolog-module* +default-prolog-module+)
 (defvar *current-table-session* nil

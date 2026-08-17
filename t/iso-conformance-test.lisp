@@ -10,7 +10,7 @@
 ;;;; This file is deliberately broad rather than deep; the per-builtin suites
 ;;;; carry the exhaustive behavioural coverage.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 ;;; 6.3-6.4 -- syntax: what the reader must accept and how tokens are formed.
 
@@ -286,9 +286,9 @@
   ("8.11.5.3" "set_input(nosuch)" "existence_error(stream")
   ("8.11.6.3" "set_output(nosuch)" "existence_error(stream")
   ("8.11.6.3" "open(F, read, S)" "instantiation_error")
-  ("8.11.6.3" "open('/tmp/cl-prolog-nonexistent', 1, S)" "type_error(atom")
-  ("8.11.6.3" "open('/tmp/cl-prolog-nonexistent', bogus, S)" "domain_error(io_mode")
-  ("8.11.6.3" "open('/tmp/cl-prolog-nonexistent', read, S, bogus)" "type_error(list")
+  ("8.11.6.3" "open('/tmp/cl-prolog-kit-nonexistent', 1, S)" "type_error(atom")
+  ("8.11.6.3" "open('/tmp/cl-prolog-kit-nonexistent', bogus, S)" "domain_error(io_mode")
+  ("8.11.6.3" "open('/tmp/cl-prolog-kit-nonexistent', read, S, bogus)" "type_error(list")
   ("8.11.7.3" "close(S)" "instantiation_error")
   ("8.11.7.3" "close(nosuch)" "existence_error(stream")
   ("8.11.8" "stream_property(S, P), nonvar(S)" :true)

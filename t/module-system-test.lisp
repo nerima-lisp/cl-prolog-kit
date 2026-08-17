@@ -1,19 +1,19 @@
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (deftest module-registry-declaration-and-resolution ()
-  (let ((registry (cl-prolog::make-module-registry))
+  (let ((registry (cl-prolog-kit::make-module-registry))
         (calls (quote ())))
-    (cl-prolog::module-registry-declare!
+    (cl-prolog-kit::module-registry-declare!
      registry (quote lists) (quote ((/ member 2) (/ append 3))))
-    (cl-prolog::module-registry-declare! registry (quote client) (quote ()))
-    (cl-prolog::module-registry-import!
+    (cl-prolog-kit::module-registry-declare! registry (quote client) (quote ()))
+    (cl-prolog-kit::module-registry-import!
      registry (quote client) (quote lists) (quote ((/ member 2))))
-    (is (cl-prolog::module-registry-exported-p
+    (is (cl-prolog-kit::module-registry-exported-p
          registry (quote lists) (quote member) 2))
-    (is (not (cl-prolog::module-registry-exported-p
+    (is (not (cl-prolog-kit::module-registry-exported-p
               registry (quote lists) (quote member) 3)))
     (is-equal (quote lists)
-              (cl-prolog::module-registry-resolve
+              (cl-prolog-kit::module-registry-resolve
                registry (quote client) (quote member) 2
                (lambda (module predicate arity)
                  (push (list module predicate arity) calls)
@@ -21,7 +21,7 @@
     (is-equal (quote ((client member 2))) calls)
     (setf calls (quote ()))
     (is-equal (quote client)
-              (cl-prolog::module-registry-resolve
+              (cl-prolog-kit::module-registry-resolve
                registry (quote client) (quote member) 2
                (lambda (module predicate arity)
                  (push (list module predicate arity) calls)
@@ -29,11 +29,11 @@
     (is-equal (quote ((client member 2))) calls)))
 
 (deftest module-registry-qualified-resolution ()
-  (let ((registry (cl-prolog::make-module-registry))
+  (let ((registry (cl-prolog-kit::make-module-registry))
         (calls (quote ())))
-    (cl-prolog::module-registry-declare! registry (quote hidden) (quote ()))
+    (cl-prolog-kit::module-registry-declare! registry (quote hidden) (quote ()))
     (is-equal (quote hidden)
-              (cl-prolog::module-registry-resolve-qualified
+              (cl-prolog-kit::module-registry-resolve-qualified
                registry (quote hidden) (quote private) 1
                (lambda (module predicate arity)
                  (push (list module predicate arity) calls)
@@ -41,7 +41,7 @@
                         (quote (hidden private 1))))))
     (is-equal (quote ((hidden private 1))) calls)
     (setf calls (quote ()))
-    (is (not (cl-prolog::module-registry-resolve-qualified
+    (is (not (cl-prolog-kit::module-registry-resolve-qualified
               registry (quote hidden) (quote missing) 0
               (lambda (module predicate arity)
                 (push (list module predicate arity) calls)
@@ -49,88 +49,88 @@
     (is-equal (quote ((hidden missing 0))) calls)))
 
 (deftest module-registry-declare-rejects-malformed-declarations ()
-  (let ((registry (cl-prolog::make-module-registry)))
+  (let ((registry (cl-prolog-kit::make-module-registry)))
     (signals-error
-      (cl-prolog::module-registry-declare! registry "not-an-atom" '()))
-    (cl-prolog::module-registry-declare! registry 'once '())
+      (cl-prolog-kit::module-registry-declare! registry "not-an-atom" '()))
+    (cl-prolog-kit::module-registry-declare! registry 'once '())
     (signals-error
-      (cl-prolog::module-registry-declare! registry 'once '()))
+      (cl-prolog-kit::module-registry-declare! registry 'once '()))
     (signals-error
-      (cl-prolog::module-registry-declare!
+      (cl-prolog-kit::module-registry-declare!
        registry 'duplicated '((/ same 1) (/ same 1))))
     (signals-error
-      (cl-prolog::module-registry-declare!
+      (cl-prolog-kit::module-registry-declare!
        registry 'malformed '((/ same))))
     (signals-error
-      (cl-prolog::module-registry-declare!
+      (cl-prolog-kit::module-registry-declare!
        registry 'too-long '((/ same 1 extra))))
     (signals-error
-      (cl-prolog::module-registry-declare!
+      (cl-prolog-kit::module-registry-declare!
        registry 'wrong-functor '((not-a-slash same 1))))
     (signals-error
-      (cl-prolog::%find-prolog-module registry "not-an-atom" "test"))))
+      (cl-prolog-kit::%find-prolog-module registry "not-an-atom" "test"))))
 
 (deftest module-registry-rejects-invalid-imports ()
-    (let ((registry (cl-prolog::make-module-registry)))
-      (cl-prolog::module-registry-declare! registry 'left '((/ same 1)))
-      (cl-prolog::module-registry-declare! registry 'right '((/ same 1)))
-      (cl-prolog::module-registry-declare! registry 'client '())
-      (cl-prolog::module-registry-import! registry 'client 'left)
+    (let ((registry (cl-prolog-kit::make-module-registry)))
+      (cl-prolog-kit::module-registry-declare! registry 'left '((/ same 1)))
+      (cl-prolog-kit::module-registry-declare! registry 'right '((/ same 1)))
+      (cl-prolog-kit::module-registry-declare! registry 'client '())
+      (cl-prolog-kit::module-registry-import! registry 'client 'left)
       (signals-error
-        (cl-prolog::module-registry-import! registry 'client 'right))
+        (cl-prolog-kit::module-registry-import! registry 'client 'right))
       (signals-error
-        (cl-prolog::module-registry-import! registry 'client 'left '((/ hidden 1))))))
+        (cl-prolog-kit::module-registry-import! registry 'client 'left '((/ hidden 1))))))
 
   (deftest module-registry-allows-reimport-from-same-origin ()
-    (let ((registry (cl-prolog::make-module-registry)))
-      (cl-prolog::module-registry-declare! registry 'library '((/ public 1)))
-      (cl-prolog::module-registry-declare! registry 'client '())
-      (cl-prolog::module-registry-import! registry 'client 'library)
-      (cl-prolog::module-registry-import! registry 'client 'library)
+    (let ((registry (cl-prolog-kit::make-module-registry)))
+      (cl-prolog-kit::module-registry-declare! registry 'library '((/ public 1)))
+      (cl-prolog-kit::module-registry-declare! registry 'client '())
+      (cl-prolog-kit::module-registry-import! registry 'client 'library)
+      (cl-prolog-kit::module-registry-import! registry 'client 'library)
       (is-equal 'library
-                (cl-prolog::module-registry-resolve
+                (cl-prolog-kit::module-registry-resolve
                  registry 'client 'public 1
                  (lambda (module predicate arity)
                    (declare (ignore module predicate arity))
                    nil)))))
 
 (deftest module-registry-rejects-import-redefinition-and-undefined-export ()
-  (let ((registry (cl-prolog::make-module-registry)))
-    (cl-prolog::module-registry-declare! registry 'library '((/ public 1)))
-    (cl-prolog::module-registry-declare! registry 'client '())
-    (cl-prolog::module-registry-import! registry 'client 'library)
+  (let ((registry (cl-prolog-kit::make-module-registry)))
+    (cl-prolog-kit::module-registry-declare! registry 'library '((/ public 1)))
+    (cl-prolog-kit::module-registry-declare! registry 'client '())
+    (cl-prolog-kit::module-registry-import! registry 'client 'library)
     (signals-error
-      (cl-prolog::module-registry-ensure-definition-allowed
+      (cl-prolog-kit::module-registry-ensure-definition-allowed
        registry 'client 'public 1))
     (signals-error
-      (cl-prolog::module-registry-validate-exports
+      (cl-prolog-kit::module-registry-validate-exports
        registry 'library
        (lambda (module predicate arity)
          (declare (ignore module predicate arity)) nil)))))
 
 (deftest module-registry-copy-is-independent ()
-  (let* ((registry (cl-prolog::make-module-registry))
-         (copy (cl-prolog::module-registry-copy registry)))
-    (cl-prolog::module-registry-declare! copy 'new-module '())
+  (let* ((registry (cl-prolog-kit::make-module-registry))
+         (copy (cl-prolog-kit::module-registry-copy registry)))
+    (cl-prolog-kit::module-registry-declare! copy 'new-module '())
     (signals-error
-      (cl-prolog::module-registry-resolve-qualified
+      (cl-prolog-kit::module-registry-resolve-qualified
        registry 'new-module 'anything 0
        (lambda (module predicate arity)
                  (declare (ignore module predicate arity)) t)))))
 
 (deftest current-module-reflects-module-registry ()
   (let ((rulebase (make-rulebase)))
-    (cl-prolog::module-registry-declare!
-     (cl-prolog::rulebase-module-registry rulebase) 'zeta '())
-    (cl-prolog::module-registry-declare!
-     (cl-prolog::rulebase-module-registry rulebase) 'alpha '())
-    (assert-query rulebase (cl-prolog::current_module ?module)
-      :ordered (((?module . cl-prolog::user))
+    (cl-prolog-kit::module-registry-declare!
+     (cl-prolog-kit::rulebase-module-registry rulebase) 'zeta '())
+    (cl-prolog-kit::module-registry-declare!
+     (cl-prolog-kit::rulebase-module-registry rulebase) 'alpha '())
+    (assert-query rulebase (cl-prolog-kit::current_module ?module)
+      :ordered (((?module . cl-prolog-kit::user))
           ((?module . alpha))
           ((?module . zeta))))
-    (assert-query rulebase (cl-prolog::current_module alpha) :succeeds)
-    (assert-query rulebase (cl-prolog::current_module missing) :fails)
-    (assert-query rulebase (cl-prolog::current_module 42) :signals prolog-type-error)))
+    (assert-query rulebase (cl-prolog-kit::current_module alpha) :succeeds)
+    (assert-query rulebase (cl-prolog-kit::current_module missing) :fails)
+    (assert-query rulebase (cl-prolog-kit::current_module 42) :signals prolog-type-error)))
 
 (deftest module-consult-isolates-colliding-predicates ()
   (let ((rulebase (make-rulebase)))
@@ -255,14 +255,14 @@
               (read-prolog-term "selected(missing)."))))))
 
 (deftest qualified-goal-rejects-stale-package-identity ()
-  (let* ((package (find-package "CL-PROLOG"))
+  (let* ((package (find-package "CL-PROLOG-KIT"))
          (original-name (package-name package))
          (original-nicknames (package-nicknames package))
          (colon (find-symbol ":" package))
          (predicate
            (symbol-function
             (find-symbol "%QUALIFIED-GOAL-P" package)))
-         (temporary-name "CL-PROLOG-GUARD-ORIGINAL")
+         (temporary-name "CL-PROLOG-KIT-GUARD-ORIGINAL")
          (replacement nil)
          (renamed nil))
     (is (null (find-package temporary-name)))

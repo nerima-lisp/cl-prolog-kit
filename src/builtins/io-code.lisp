@@ -1,6 +1,6 @@
 ;;;; ISO character-code stream predicates.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %io-read-code (entry environment operation &key peek)
   (let ((character (%io-read-character entry environment operation :peek peek)))

@@ -2,7 +2,7 @@
 ;;;; upcase_atom/2, downcase_atom/2.  A SWI-compatible subset of the type
 ;;;; specifiers, sharing one classifier between the char and code variants.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %char-whitespace-p (character)
   (member character '(#\Space #\Tab #\Newline #\Return #\Page #\Linefeed)

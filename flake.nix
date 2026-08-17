@@ -24,7 +24,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # cl-weave is the testing library used by the cl-prolog/test ASDF system.
+    # cl-weave is the testing library used by the cl-prolog-kit/test ASDF system.
     # It follows this flake's nixpkgs so both share a single SBCL.
     cl-weave = {
       url = "github:nerima-lisp/cl-weave/v1.2.0";
@@ -75,11 +75,11 @@
       ];
 
       # `nix run .#test` -- and, through `apps.default`, README's headline
-      # `nix run github:nerima-lisp/cl-prolog`.
+      # `nix run github:nerima-lisp/cl-prolog-kit`.
       #
       # This deliberately REPLACES the preset's generated `apps.test`, which
       # runs `sbcl --script run-tests.lisp` with the compiled-in default
-      # dynamic space -- exactly what `checks.default` already runs. cl-prolog
+      # dynamic space -- exactly what `checks.default` already runs. cl-prolog-kit
       # drives the suite through cl-weave's own delivered CLI instead, which
       # sets a 4096 MB dynamic space: a genuinely different code path, so a
       # heap-pressure-sensitive test that passes one way and fails the other
@@ -90,7 +90,7 @@
       # The delivered binary knows cl-weave with the source directory it was
       # dumped in -- a build sandbox that no longer exists -- so cl-weave's
       # shipped source tree has to be back on the registry before
-      # `cl-prolog/weave` can resolve its `:depends-on`. `share/common-lisp/
+      # `cl-prolog-kit/weave` can resolve its `:depends-on`. `share/common-lisp/
       # source//` is the layout cl-weave's `packages.default` publishes for
       # exactly that. Unlike the `lispDerivation` that `lispCheckDependencies`
       # puts on the registry below, this is a plain shell wrapper with ASDF's
@@ -101,20 +101,20 @@
         let
           clWeaveCli = cl-weave.packages.${ctx.system}.default;
           runner = ctx.pkgs.writeShellApplication {
-            name = "cl-prolog-test";
+            name = "cl-prolog-kit-test";
             runtimeInputs = [ clWeaveCli ];
             text = ''
               export CL_SOURCE_REGISTRY="${clWeaveCli}/share/common-lisp/source//:${ctx.src}//:''${CL_SOURCE_REGISTRY:-}"
-              exec cl-weave run cl-prolog/test --system cl-prolog/callgraph/test "$@"
+              exec cl-weave run cl-prolog-kit/test --system cl-prolog-kit/callgraph/test "$@"
             '';
           };
         in
         {
           type = "app";
-          program = "${runner}/bin/cl-prolog-test";
+          program = "${runner}/bin/cl-prolog-kit-test";
           meta = {
-            description = "Run the cl-prolog cl-weave ASDF test suite";
-            mainProgram = "cl-prolog-test";
+            description = "Run the cl-prolog-kit cl-weave ASDF test suite";
+            mainProgram = "cl-prolog-kit-test";
           };
         };
 
@@ -127,13 +127,13 @@
       # repository used to carry in a hand-written runner. That dance is
       # load-bearing: instrumentation is a COMPILE-time property, so only code
       # compiled while `store-coverage-data` is proclaimed records anything,
-      # and the derivation's own buildPhase already compiled cl-prolog without
+      # and the derivation's own buildPhase already compiled cl-prolog-kit without
       # it. `:force t` is therefore correctness, not a performance knob --
       # without it ASDF finds the existing fasls current and the report comes
       # back empty.
       #
       # `systems` is spelled out rather than left to default to the
-      # derivation's own `[ "cl-prolog" ]`. The second declaim is restored
+      # derivation's own `[ "cl-prolog-kit" ]`. The second declaim is restored
       # before run-tests.lisp is loaded, so both test systems stay out of the
       # numbers while exercising the engine, weave helpers, and callgraph API.
       #
@@ -146,11 +146,11 @@
         ctx:
         ctx.cl.mkCoverageReport {
           drv = ctx.package;
-          name = "cl-prolog-coverage";
+          name = "cl-prolog-kit-coverage";
           systems = [
-            "cl-prolog"
-            "cl-prolog/weave"
-            "cl-prolog/callgraph"
+            "cl-prolog-kit"
+            "cl-prolog-kit/weave"
+            "cl-prolog-kit/callgraph"
           ];
           timeoutSeconds = 600;
           killAfterSeconds = 30;
@@ -162,14 +162,14 @@
     cl-nix-forge.lib.${builtins.head systems}.mkPackageFlake {
       inherit self systems nixpkgs;
 
-      pname = "cl-prolog";
+      pname = "cl-prolog-kit";
 
       # Single source of truth for the project version: the `:version` form in
-      # cl-prolog.asd, so the flake can never drift from the ASDF system
+      # cl-prolog-kit.asd, so the flake can never drift from the ASDF system
       # definition (the package once pinned a stale 0.6.0). All five systems
       # in that file declare the same version; `fromAsdSystem` accepts that
       # unanimity and refuses to pick a winner if they ever disagree.
-      asd = ./cl-prolog.asd;
+      asd = ./cl-prolog-kit.asd;
 
       # Spelled out rather than left to `mkPackageFlake`'s `self` default,
       # which does not evaluate: a flake's `self` is an attrset carrying an
@@ -199,20 +199,20 @@
       # `t/iso/` is the one thing the allowlist genuinely cannot infer: the
       # vendored INRIA ISO conformance corpus is extension-less data files
       # that t/iso-inria-test.lisp reads at RUN time through
-      # `(asdf:system-relative-pathname :cl-prolog/test "t/iso/inriasuite/")`.
+      # `(asdf:system-relative-pathname :cl-prolog-kit/test "t/iso/inriasuite/")`.
       # Dropping them does not fail to build -- it silently drops the corpus
       # score below `+inria-conformance-floor+`.
       sourceInclude = [ ./t/iso ];
 
       meta = {
         description = "A small, dependency-free Common Lisp Prolog engine.";
-        homepage = "https://github.com/nerima-lisp/cl-prolog";
+        homepage = "https://github.com/nerima-lisp/cl-prolog-kit";
         license = nixpkgs.lib.licenses.mit;
         platforms = nixpkgs.lib.platforms.unix;
       };
 
       # cl-weave is needed to COMPILE AND RUN the suite, not to load
-      # cl-prolog: the engine itself is dependency-free, which is why this is
+      # cl-prolog-kit: the engine itself is dependency-free, which is why this is
       # `lispCheckDependencies` and not `lispDependencies`. It is a built
       # derivation, never a CL_SOURCE_REGISTRY string -- assembling that
       # registry is cl-nix-forge's job and it does it transitively, for
@@ -280,7 +280,7 @@
             paredit-cli.packages.${ctx.system}.default;
 
       overrideOutputs = ctx: {
-        # See `testApp` above: cl-prolog's test app is deliberately a
+        # See `testApp` above: cl-prolog-kit's test app is deliberately a
         # different execution image from `checks.default`, which is the only
         # thing that makes `checks.app-test` more than a duplicate gate.
         apps.test = testApp ctx;
@@ -300,7 +300,7 @@
             # document.
             paredit-lint = paredit-cli.lib.${ctx.system}.mkLintCheck {
               inherit (ctx) src;
-              name = "cl-prolog-paredit-lint";
+              name = "cl-prolog-kit-paredit-lint";
             };
           }
           // {
@@ -310,10 +310,10 @@
             # time budget than the full suite.
             examples = ctx.cl.mkScriptCheck {
               drv = ctx.package;
-              name = "cl-prolog-examples";
+              name = "cl-prolog-kit-examples";
               entryPointText = ''
                 (require "asdf")
-                (asdf:load-system "cl-prolog/examples")
+                (asdf:load-system "cl-prolog-kit/examples")
               '';
               timeoutSeconds = 120;
               killAfterSeconds = 30;
@@ -341,7 +341,7 @@
             # code path, so a heap-pressure-sensitive test can no longer pass
             # one way and fail the other with no CI signal either way. It is
             # also the only gate that realises `apps.test`, and therefore
-            # README's headline `nix run github:nerima-lisp/cl-prolog`.
+            # README's headline `nix run github:nerima-lisp/cl-prolog-kit`.
             #
             # A plain `runCommand` rather than `mkCommandCheck`: the app carries
             # its own CL_SOURCE_REGISTRY pointing at store paths, and
@@ -351,7 +351,7 @@
             # ASDF's default translations put them under $HOME/.cache, which is
             # kept inside the build's own TMPDIR so nothing touches a real user
             # profile.
-            app-test = ctx.pkgs.runCommand "cl-prolog-app-test" { } ''
+            app-test = ctx.pkgs.runCommand "cl-prolog-kit-app-test" { } ''
               export HOME="$TMPDIR/home"
               export XDG_CACHE_HOME="$TMPDIR/cache"
               mkdir -p "$HOME" "$XDG_CACHE_HOME"

@@ -5,7 +5,7 @@
 ;;;; call/1).  include/3, exclude/3, and partition/4 filter a list by testing
 ;;;; each element's goal for provability without leaking its bindings.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (define-term-guard %resolve-meta-goal (goal)
   :documentation "Resolve the goal-closure argument of a meta-predicate."

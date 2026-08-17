@@ -1,4 +1,4 @@
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %prepare-dynamic-assertion! (rulebase entry)
   "Validate and register the predicate targeted by a dynamic assertion."

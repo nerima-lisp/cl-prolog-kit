@@ -2,7 +2,7 @@
 ;;;; struct tracking one source's load state and rollback effects, and
 ;;;; the registry table holding one record per canonical source pathname.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defstruct (%source-record (:constructor %make-source-record (state)))
   "Artifacts owned by one canonical source file."

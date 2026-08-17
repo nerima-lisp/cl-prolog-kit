@@ -6,7 +6,7 @@
 ;;;; to the module that defines it.  The CPS proof search that consumes all of
 ;;;; this lives in prover.lisp, which loads immediately after.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defparameter +call-context-atom+ (%iso-atom "CALL"))
 
@@ -83,7 +83,7 @@
            (let* ((cached (load-time-value (%prolog-symbol ":") t))
                   (home (symbol-package cached)))
              (if (and home
-                      (eq (find-package (quote #:cl-prolog)) home))
+                      (eq (find-package (quote #:cl-prolog-kit)) home))
                  cached
                  (%prolog-symbol ":"))))))
 

@@ -1,4 +1,4 @@
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (deftest-queries finite-domain-relations ((make-rulebase))
   ((and (in (?x ?y) (1 |..| 3)) (|#<| ?x ?y) (labeling (ff up) (?x ?y)))
@@ -44,7 +44,7 @@
           (prolog
             ((fd-tabled ?value) (= ?value 1))
             ((fd-tabled ?value) (= ?value 2)))))
-    (cl-prolog::%add-rulebase-table-declaration!
+    (cl-prolog-kit::%add-rulebase-table-declaration!
      rulebase 'fd-tabled 1 :test)
     (assert-query
      rulebase
@@ -115,11 +115,11 @@
   ((and (in ?x (1 |..| 3)) (|#<| ?x ?y)) :succeeds))
 
 (deftest finite-domain-source-operators ()
-  (is-equal '(in cl-prolog::?x (|..| 1 3))
+  (is-equal '(in cl-prolog-kit::?x (|..| 1 3))
             (read-prolog-term "X in 1..3"))
-  (is-equal '(|#=| cl-prolog::?x 2)
+  (is-equal '(|#=| cl-prolog-kit::?x 2)
             (read-prolog-term "X #= 2"))
-  (is-equal '(|#\\=| cl-prolog::?x 2)
+  (is-equal '(|#\\=| cl-prolog-kit::?x 2)
             (read-prolog-term "X #\\= 2")))
 
 (deftest finite-domain-parsed-range-queries-solve ()

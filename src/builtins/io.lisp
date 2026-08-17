@@ -1,6 +1,6 @@
 ;;;; ISO-style stream builtins over the rulebase-owned I/O context.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %io-operation (name)
   (%iso-atom name))

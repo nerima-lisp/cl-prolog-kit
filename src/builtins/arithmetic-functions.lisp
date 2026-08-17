@@ -6,7 +6,7 @@
 ;;;; surface builtins (is/2, the comparisons, between/3, succ/2, plus/3) that
 ;;;; look up these tables and loads immediately after.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (define-contextual-error-condition arithmetic-evaluation-error (prolog-evaluation-error)
   (expression arithmetic-error-expression)

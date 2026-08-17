@@ -1,6 +1,6 @@
 ;;;; Persistent Prolog operator definitions.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defconstant +maximum-operator-priority+ 1200)
 
@@ -33,7 +33,7 @@
 
 (defun %same-operator-key-p (definition name specifier)
   ;; Names compare by text, not identity: `+' reaches the table as COMMON-LISP:+
-  ;; from the Lisp-authored standard table but as CL-PROLOG.USER-ATOMS::+ when
+  ;; from the Lisp-authored standard table but as CL-PROLOG-KIT.USER-ATOMS::+ when
   ;; op/3 or the parser names it, and one atom must mean one operator.
   (and (%same-atom-text-p name (operator-definition-name definition))
        (eq specifier (operator-definition-specifier definition))))

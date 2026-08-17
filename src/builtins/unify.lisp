@@ -5,7 +5,7 @@
 ;;;; catch/throw and the rest of the control constructs and loads immediately
 ;;;; after.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %occurs-check-flag (rulebase)
   "The rulebase's occurs_check flag value (\"TRUE\", \"FALSE\", or \"ERROR\")."

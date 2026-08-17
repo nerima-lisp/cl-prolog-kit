@@ -1,7 +1,7 @@
 ;;;; Collection builtin tests: findall/bagof/setof, sort/msort/keysort, and
 ;;;; the standard-order-of-terms variable/variant grouping they share.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (deftest-queries solution-collection-builtins
     ((make-rulebase
@@ -61,8 +61,8 @@
   ((sort (z 2 a 1) ?sorted) :ordered (((?sorted 1 2 a z))))
   ((sort ((a first second) (z item)) ?sorted)
    :ordered (((?sorted (z item) (a first second)))))
-  ((sort (z cl-prolog.user-atoms::car) ?sorted)
-   :ordered (((?sorted cl-prolog.user-atoms::car z))))
+  ((sort (z cl-prolog-kit.user-atoms::car) ?sorted)
+   :ordered (((?sorted cl-prolog-kit.user-atoms::car z))))
   ((keysort ((- 2 second) (- 1 first) (- 2 third)) ?sorted)
    :ordered (((?sorted (- 1 first) (- 2 second) (- 2 third))))))
 
@@ -130,7 +130,7 @@
           ((a-tom foo)) ((a-tom bar))
           ;; a defined predicate with no solutions, so aggregate_all sees an
           ;; empty set (an *undefined* predicate would raise existence_error).
-          ((nonexistent ?x) (cl-prolog::fail))
+          ((nonexistent ?x) (cl-prolog-kit::fail))
           ((agg-count ?n) (aggregate_all count (p ?x) ?n))
           ((agg-count1 ?n) (aggregate_all (count ?x) (p ?x) ?n))
           ((agg-sum ?n) (aggregate_all (sum ?x) (p ?x) ?n))
@@ -197,7 +197,7 @@
          (equivalent (list 'same))
          (other (list 'z))
          (groups
-           (cl-prolog::%partition-solution-groups
+           (cl-prolog-kit::%partition-solution-groups
             (list (cons other 'last)
                   (cons representative 'first)
                   (cons equivalent 'second))))
@@ -212,7 +212,7 @@
     (setf (cdr first-cycle) first-cycle
           (cdr second-cycle) second-cycle)
     (let* ((groups
-             (cl-prolog::%partition-solution-groups
+             (cl-prolog-kit::%partition-solution-groups
               (list (cons first-cycle 'first)
                     (cons second-cycle 'second))))
            (group (first groups)))

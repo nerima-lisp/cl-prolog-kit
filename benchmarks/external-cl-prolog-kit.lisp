@@ -1,28 +1,28 @@
 (require :asdf)
 
-(asdf:load-asd (truename "cl-prolog.asd"))
+(asdf:load-asd (truename "cl-prolog-kit.asd"))
 
-(asdf:load-system :cl-prolog)
+(asdf:load-system :cl-prolog-kit)
 
 (in-package #:cl-user)
 
 (defparameter *external-node-count* 31)
 
 (defun make-external-rulebase ()
-  (let ((source (cl-prolog:fresh-logic-variable "?SOURCE"))
-        (destination (cl-prolog:fresh-logic-variable "?DESTINATION"))
-        (middle (cl-prolog:fresh-logic-variable "?MIDDLE")))
-    (cl-prolog:make-rulebase
+  (let ((source (cl-prolog-kit:fresh-logic-variable "?SOURCE"))
+        (destination (cl-prolog-kit:fresh-logic-variable "?DESTINATION"))
+        (middle (cl-prolog-kit:fresh-logic-variable "?MIDDLE")))
+    (cl-prolog-kit:make-rulebase
       :clauses
       (nconc
         (loop for child from 1 below *external-node-count*
               for parent = (floor (1- child) 2)
-              collect (cl-prolog:make-clause (list :edge parent child)))
+              collect (cl-prolog-kit:make-clause (list :edge parent child)))
         (list
-          (cl-prolog:make-clause
+          (cl-prolog-kit:make-clause
             (list :path source destination)
             (list (list :edge source destination)))
-          (cl-prolog:make-clause
+          (cl-prolog-kit:make-clause
             (list :path source destination)
             (list (list :edge source middle) (list :path middle destination))))))))
 
@@ -41,9 +41,9 @@
 (defun run-external-workload (rulebase iterations)
   (loop repeat iterations
         sum (let* ((destination
-                     (cl-prolog:fresh-logic-variable "?DESTINATION"))
+                     (cl-prolog-kit:fresh-logic-variable "?DESTINATION"))
                    (solutions
-                     (cl-prolog:query-prolog
+                     (cl-prolog-kit:query-prolog
                       rulebase
                       (list (list :path 0 destination)))))
               (multiple-value-bind (count checksum fingerprint)

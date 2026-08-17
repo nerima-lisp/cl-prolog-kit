@@ -2,7 +2,7 @@
 ;;;; textual (re-readable) representation, routing parser failures through the
 ;;;; engine's catchable ISO syntax/resource errors.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %parse-term-from-text (text rulebase environment operation)
   "Parse one Prolog term from TEXT under RULEBASE's operator table and

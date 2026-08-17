@@ -3,7 +3,7 @@
 ;;;; tokenizer (lexer-tokenizer.lisp), with a cache for the immutable
 ;;;; standard operator table.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %identifier-character-p (character)
   (or (alphanumericp character) (char= character #\_)))

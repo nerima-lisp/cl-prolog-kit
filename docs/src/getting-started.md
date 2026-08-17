@@ -1,11 +1,11 @@
 # Getting Started
 
-`cl-prolog` is a **dependency-free** Common Lisp library: the core engine pulls
+`cl-prolog-kit` is a **dependency-free** Common Lisp library: the core engine pulls
 in nothing beyond the ANSI standard. It is developed and tested against
 [SBCL](https://www.sbcl.org/), and leans on a portable, ANSI-facing core.
 
 !!! info "Not on Quicklisp yet"
-    cl-prolog is not currently distributed by Quicklisp. Install it by cloning
+    cl-prolog-kit is not currently distributed by Quicklisp. Install it by cloning
     the repository and making the checkout visible to ASDF.
 
 ## Requirements
@@ -21,38 +21,38 @@ Clone the repository and load its ASDF definition directly. Run these commands
 from the repository root:
 
 ```sh
-git clone https://github.com/nerima-lisp/cl-prolog.git
-cd cl-prolog
+git clone https://github.com/nerima-lisp/cl-prolog-kit.git
+cd cl-prolog-kit
 sbcl --non-interactive \
   --eval '(require :asdf)' \
-  --eval '(asdf:load-asd (truename "cl-prolog.asd"))' \
-  --eval '(asdf:load-system :cl-prolog)'
+  --eval '(asdf:load-asd (truename "cl-prolog-kit.asd"))' \
+  --eval '(asdf:load-system :cl-prolog-kit)'
 ```
 
 From inside a running Lisp, the same three forms load the library:
 
 ```lisp
 (require :asdf)
-(asdf:load-asd (truename "cl-prolog.asd")) ; run from the repository root
-(asdf:load-system :cl-prolog)
+(asdf:load-asd (truename "cl-prolog-kit.asd")) ; run from the repository root
+(asdf:load-system :cl-prolog-kit)
 ```
 
-The public package is `cl-prolog`. Enter it — or `:use` it — before writing
+The public package is `cl-prolog-kit`. Enter it — or `:use` it — before writing
 queries:
 
 ```lisp
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 ```
 
 ## Register with the ASDF source registry
 
-To load `cl-prolog` from anywhere (not only the repository root), place the
+To load `cl-prolog-kit` from anywhere (not only the repository root), place the
 checkout in a directory configured in your
 [ASDF source registry](https://asdf.common-lisp.dev/asdf.html#Configuring-ASDF).
 Once ASDF can find the `.asd`, a single form loads it:
 
 ```lisp
-(asdf:load-system :cl-prolog)
+(asdf:load-system :cl-prolog-kit)
 ```
 
 ## Run through Nix
@@ -61,7 +61,7 @@ The flake exposes a runner that executes the
 [cl-weave](https://github.com/nerima-lisp/cl-weave) regression suite:
 
 ```sh
-nix run github:nerima-lisp/cl-prolog
+nix run github:nerima-lisp/cl-prolog-kit
 ```
 
 !!! info "Supported systems"
@@ -72,14 +72,14 @@ nix run github:nerima-lisp/cl-prolog
 
 ## Systems provided
 
-The `cl-prolog.asd` file defines several ASDF systems:
+The `cl-prolog-kit.asd` file defines several ASDF systems:
 
 | System                 | Purpose                                              |
 | ---------------------- | ---------------------------------------------------- |
-| `cl-prolog`            | The production library and public package.           |
-| `cl-prolog/test`       | The cl-weave regression suite ([Development](project/development.md#testing)). |
-| `cl-prolog/weave`      | Public query test helpers built on cl-weave.         |
-| `cl-prolog/examples`   | Runnable examples ([Examples](guide/examples.md)).   |
+| `cl-prolog-kit`            | The production library and public package.           |
+| `cl-prolog-kit/test`       | The cl-weave regression suite ([Development](project/development.md#testing)). |
+| `cl-prolog-kit/weave`      | Public query test helpers built on cl-weave.         |
+| `cl-prolog-kit/examples`   | Runnable examples ([Examples](guide/examples.md)).   |
 
 ## Define a rulebase and query it
 
