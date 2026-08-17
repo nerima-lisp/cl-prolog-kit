@@ -5,10 +5,10 @@ goals. Each recipe is self-contained. For the reference behind them see
 [Querying](querying.md), [Builtin Goals](builtin-goals.md), and
 [Rule DSL](rule-dsl.md).
 
-All snippets assume you are in the `cl-prolog` package:
+All snippets assume you are in the `cl-prolog-kit` package:
 
 ```lisp
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 ```
 
 ## Collect all children of a parent

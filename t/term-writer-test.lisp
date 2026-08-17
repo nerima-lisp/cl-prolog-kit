@@ -1,9 +1,9 @@
 ;;;; Canonical Prolog term writer tests.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (deftest prolog-term-writer-atoms-variables-and-numbers ()
-  (is-equal "simple" (prolog-term-string 'cl-prolog::simple))
+  (is-equal "simple" (prolog-term-string 'cl-prolog-kit::simple))
   ;; A mixed-case atom must be written with its spelling intact and quoted,
   ;; so that reading the output back yields the same atom.
   (is-equal "'Mary Jane'"
@@ -12,14 +12,14 @@
   (is-equal "'FooBar'" (prolog-term-string (prolog-atom "FooBar")))
   (is-equal "'can''t'"
             (prolog-term-string (prolog-atom "can't")))
-  (is-equal "X" (prolog-term-string 'cl-prolog::?X))
+  (is-equal "X" (prolog-term-string 'cl-prolog-kit::?X))
   (is-equal "42" (prolog-term-string 42))
   (is-equal 1.5d0
             (read-prolog-term (prolog-term-string 1.5d0)))
-  (is-equal "!" (prolog-term-string 'cl-prolog::|!|)))
+  (is-equal "!" (prolog-term-string 'cl-prolog-kit::|!|)))
 
 (deftest prolog-term-writer-handles-malformed-numbervars-and-fx-prefixes ()
-  (let ((term (list (prolog-atom "$VAR") 0 'cl-prolog::extra)))
+  (let ((term (list (prolog-atom "$VAR") 0 'cl-prolog-kit::extra)))
     (is-equal term (read-prolog-term (prolog-term-string term))))
   (let ((term (read-prolog-term ":- foo.")))
     (is-equal term (read-prolog-term (prolog-term-string term)))))
@@ -27,15 +27,15 @@
 (deftest prolog-term-writer-lists-and-compounds ()
   (is-equal "pair(a,2)"
             (prolog-term-string
-             '(cl-prolog::pair cl-prolog::a 2)))
+             '(cl-prolog-kit::pair cl-prolog-kit::a 2)))
   (is-equal "[1,2,3]" (prolog-term-string '(1 2 3)))
   (is-equal "[1,2|TAIL]"
-            (prolog-term-string '(1 2 . cl-prolog::?TAIL)))
+            (prolog-term-string '(1 2 . cl-prolog-kit::?TAIL)))
   (is-equal '() (read-prolog-term (prolog-term-string '())))
-  (is-equal '(cl-prolog::pair cl-prolog::a 2)
+  (is-equal '(cl-prolog-kit::pair cl-prolog-kit::a 2)
             (read-prolog-term
              (prolog-term-string
-              '(cl-prolog::pair cl-prolog::a 2)))))
+              '(cl-prolog-kit::pair cl-prolog-kit::a 2)))))
 
 (cl-weave:it-property
     "reading a ground term's canonical printed form reproduces an equal term"
@@ -43,8 +43,8 @@
             (cl-weave:gen-one-of
              (cl-weave:gen-integer :min -1000 :max 1000)
              (cl-weave:gen-member
-              '(cl-prolog::a cl-prolog::b cl-prolog::foo cl-prolog::bar
-                cl-prolog::baz)))
+              '(cl-prolog-kit::a cl-prolog-kit::b cl-prolog-kit::foo cl-prolog-kit::bar
+                cl-prolog-kit::baz)))
             (lambda (self) (cl-weave:gen-list self :min-length 1 :max-length 3))
             :max-depth 3)))
   (cl-weave:expect-has-assertions)
@@ -87,7 +87,7 @@ a diff, not just a semantic pass/fail."
                    :to-match-inline-snapshot "\"pair(1 + 2,3 * 4)\""))
 
 (deftest prolog-term-writer-stream-api ()
-  (let ((term '(cl-prolog::f cl-prolog::a)))
+  (let ((term '(cl-prolog-kit::f cl-prolog-kit::a)))
     (is (eq term
             (write-prolog-term term (make-broadcast-stream)))))
   (signals-error (prolog-term-string #\x)))

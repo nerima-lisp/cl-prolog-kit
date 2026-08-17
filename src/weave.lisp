@@ -1,8 +1,8 @@
-;;;; cl-weave helpers for testing cl-prolog queries.
+;;;; cl-weave helpers for testing cl-prolog-kit queries.
 ;;;;
 ;;;; The package itself is declared in src/package-weave.lisp.
 
-(in-package #:cl-prolog/weave)
+(in-package #:cl-prolog-kit/weave)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun %split-query-assertion (kind arguments)
@@ -23,11 +23,11 @@
   (defun %query-run-form (rulebase query kind options)
     (case kind
       (:first
-       `(cl-prolog:query-prolog-first ,rulebase ',query ,@options))
+       `(cl-prolog-kit:query-prolog-first ,rulebase ',query ,@options))
       (:succeeds
-       `(cl-prolog:prolog-succeeds-p ,rulebase ',query ,@options))
+       `(cl-prolog-kit:prolog-succeeds-p ,rulebase ',query ,@options))
       (otherwise
-       `(cl-prolog:query-prolog ,rulebase ',query ,@options))))
+       `(cl-prolog-kit:query-prolog ,rulebase ',query ,@options))))
 
   (defun %query-assertion-form (rulebase query kind arguments)
     (multiple-value-bind (expected options)

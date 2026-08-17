@@ -2,7 +2,7 @@
 ;;;; (==, \==, =@=, \=@=, @<, @=<, @>, @>=, compare, unifiable,
 ;;;; subsumes_term) and the comparison primitives they share.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %same-atomic-term-p (left right)
   "True when the atomic terms LEFT and RIGHT are the same Prolog term.
@@ -104,7 +104,7 @@ false for a pair `X = Y' unifies, and `sort/2' would keep both copies."
 
 Text, not symbol name or home package: two symbols with the same text are the
 same Prolog atom -- the atom `list' reaches the engine as COMMON-LISP:LIST from
-a Lisp-authored rulebase but as CL-PROLOG.USER-ATOMS::LIST from Prolog source --
+a Lisp-authored rulebase but as CL-PROLOG-KIT.USER-ATOMS::LIST from Prolog source --
 so they must compare equal here exactly as they unify."
   (%compare-atom-texts left right))
 

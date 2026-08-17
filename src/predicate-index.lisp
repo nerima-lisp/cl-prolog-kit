@@ -2,7 +2,7 @@
 ;;;; (module predicate arity) and the immutable current-state descriptors
 ;;;; that provide first-argument indexing.  Operates on stored clauses from
 ;;;; clause.lisp; the rulebase that owns these tables lives in data.lisp.
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defstruct (%predicate-descriptor
     (:copier nil)

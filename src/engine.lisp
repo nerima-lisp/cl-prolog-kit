@@ -9,7 +9,7 @@
 ;;;; establishes a fresh catch tag carried through the proof state, and !
 ;;;; throws to the tag of the clause it appears in (see prover.lisp).
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defparameter *max-prolog-depth* nil
   "Default rule-resolution depth bound; NIL means unbounded search.")

@@ -1,7 +1,7 @@
 ;;;; Dynamic-database builtin tests: assert/retract/abolish,
 ;;;; current_predicate/2, predicate_property/2, and clause/2.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (deftest dynamic-database-builtins ()
   (let ((rulebase (make-rulebase)))
@@ -55,13 +55,13 @@
                   :fails)
     (is-equal
      '(((?fruit . ?fruit) (?shade . ?shade)
-        (?property . cl-prolog::dynamic))
+        (?property . cl-prolog-kit::dynamic))
        ((?fruit . ?fruit) (?shade . ?shade)
-        (?property . cl-prolog::user))
+        (?property . cl-prolog-kit::user))
        ((?fruit . ?fruit) (?shade . ?shade)
-        (?property . cl-prolog::defined))
+        (?property . cl-prolog-kit::defined))
        ((?fruit . ?fruit) (?shade . ?shade)
-        (?property cl-prolog::number_of_clauses 3)))
+        (?property cl-prolog-kit::number_of_clauses 3)))
      (query-prolog
       rulebase '(predicate_property (color ?fruit ?shade) ?property)))
     (assert-query rulebase (retractall (color apple ?shade)) :succeeds)
@@ -110,18 +110,18 @@ a Lisp UNBOUND-VARIABLE.  A bare :SIGNALS expectation accepts that just as
 happily as the ISO error and would not have caught the defect."
   (let ((rulebase (make-rulebase)))
     (assert-query rulebase (assertz (:- 42 (color a red)))
-                  :signals cl-prolog:prolog-type-error)
+                  :signals cl-prolog-kit:prolog-type-error)
     (assert-query rulebase (assertz (:- "text" (color a red)))
-                  :signals cl-prolog:prolog-type-error)
+                  :signals cl-prolog-kit:prolog-type-error)
     ;; No head at all to blame, so the whole term is the culprit.
     (assert-query rulebase (assertz (:-))
-                  :signals cl-prolog:prolog-type-error)
+                  :signals cl-prolog-kit:prolog-type-error)
     ;; ISO 13211-1 8.9.1.3: an uninstantiated head is an instantiation_error,
     ;; matching how assertz(X) is already handled.
     (assert-query rulebase (assertz (:- ?head (color a red)))
-                  :signals cl-prolog:prolog-instantiation-error)
+                  :signals cl-prolog-kit:prolog-instantiation-error)
     (assert-query rulebase (assertz (:- (ok a) 42))
-                  :signals cl-prolog:prolog-type-error)))
+                  :signals cl-prolog-kit:prolog-type-error)))
 
 (deftest-queries predicate-property-validates-arguments ((make-rulebase))
   ("an unbound head is rejected"
@@ -157,8 +157,8 @@ happily as the ISO error and would not have caught the defect."
     (assert-query rulebase (current_predicate (/ gamma 1)) :succeeds)))
 
 (deftest predicate-indicator-snapshots-are-detached ()
-  (let ((builtin-snapshot (cl-prolog::%builtin-predicate-indicators))
-        (foreign-snapshot (cl-prolog::%foreign-predicate-indicators)))
+  (let ((builtin-snapshot (cl-prolog-kit::%builtin-predicate-indicators))
+        (foreign-snapshot (cl-prolog-kit::%foreign-predicate-indicators)))
     (is builtin-snapshot)
     (is foreign-snapshot)
     (let ((builtin-first (first builtin-snapshot))
@@ -166,9 +166,9 @@ happily as the ISO error and would not have caught the defect."
       (setf (first builtin-snapshot) 'mutated-builtin
             (first foreign-snapshot) 'mutated-foreign)
       (is-equal builtin-first
-                (first (cl-prolog::%builtin-predicate-indicators)))
+                (first (cl-prolog-kit::%builtin-predicate-indicators)))
       (is-equal foreign-first
-                (first (cl-prolog::%foreign-predicate-indicators))))))
+                (first (cl-prolog-kit::%foreign-predicate-indicators))))))
 
 (deftest current-predicate-validates-ground-indicators ()
   (let ((rulebase (make-rulebase)))
@@ -258,13 +258,13 @@ happily as the ISO error and would not have caught the defect."
 (deftest proper-list-p-rejects-circular-lists ()
   (let ((circular (list 'value)))
     (setf (cdr circular) circular)
-    (is (not (cl-prolog::%proper-list-p circular)))))
+    (is (not (cl-prolog-kit::%proper-list-p circular)))))
 
 (deftest abolish-removes-the-dynamic-declaration ()
   (let ((rulebase (make-rulebase)))
     (assert-query rulebase (assertz (temporary first)) :succeeds)
     (assert-query rulebase (abolish (/ temporary 1)) :succeeds)
-    (is (null (cl-prolog::%rulebase-predicate-property
+    (is (null (cl-prolog-kit::%rulebase-predicate-property
                rulebase 'temporary 1)))
     (assert-query rulebase (assertz (temporary second)) :succeeds)
     (assert-query rulebase (temporary ?value) :ordered (((?value . second))))))
@@ -272,11 +272,11 @@ happily as the ISO error and would not have caught the defect."
 (deftest abolish-removes-table-declarations ()
   (let ((rulebase (make-rulebase)))
     (assert-query rulebase (assertz (tabled-dynamic value)) :succeeds)
-    (cl-prolog::%add-rulebase-table-declaration!
+    (cl-prolog-kit::%add-rulebase-table-declaration!
      rulebase 'tabled-dynamic 1 :runtime)
-    (is (cl-prolog::%rulebase-tabled-p rulebase 'tabled-dynamic 1))
+    (is (cl-prolog-kit::%rulebase-tabled-p rulebase 'tabled-dynamic 1))
     (assert-query rulebase (abolish (/ tabled-dynamic 1)) :succeeds)
-    (is (not (cl-prolog::%rulebase-tabled-p
+    (is (not (cl-prolog-kit::%rulebase-tabled-p
               rulebase 'tabled-dynamic 1)))))
 
 (deftest current-predicate-includes-empty-dynamic-procedures ()
@@ -342,7 +342,7 @@ fact head, so the predicate it should have defined stayed undefined."
     (let* ((clauses (rulebase-visible-clauses rulebase))
            (head (clause-head (first clauses))))
       (is-equal 1 (length clauses))
-      (is-equal 'cl-prolog::stored (first head))
+      (is-equal 'cl-prolog-kit::stored (first head))
       (is-equal 1 (length (rest head)))
       (is (logic-var-p (second head)))
       (is (clause-body (first clauses))

@@ -1,6 +1,6 @@
 ;;;; DCG surface and runtime tests.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (defun assert-phrase (expected-remainder expected-matched-p
                       rulebase rule-name input)
@@ -109,11 +109,11 @@
 
 (deftest dcg-expansion-internals ()
   (is-equal '((:when t) (= ?in ?out))
-            (cl-prolog::%dcg-element-goals '(brace t) '?in '?out))
+            (cl-prolog-kit::%dcg-element-goals '(brace t) '?in '?out))
   (is-equal '((node ?in ?out))
-            (cl-prolog::%dcg-element-goals 'node '?in '?out))
+            (cl-prolog-kit::%dcg-element-goals 'node '?in '?out))
   (is-equal '((node ?x ?in ?out))
-            (cl-prolog::%dcg-element-goals '(node ?x) '?in '?out))
+            (cl-prolog-kit::%dcg-element-goals '(node ?x) '?in '?out))
   (is (signals-error (with-macroexpansion (expansion '(def-dcg-rule broken 42))
                        expansion))
       "Unknown DCG body elements must fail at expansion time")
@@ -123,7 +123,7 @@
 
 (deftest-queries prolog-dcg-expansion-is-a-difference-list-clause
     ((make-rulebase
-      :clauses (list (cl-prolog::%expand-prolog-dcg-clause
+      :clauses (list (cl-prolog-kit::%expand-prolog-dcg-clause
                       '(pair ?x)
                       '(and (dcg-terminals (?x))
                             (dcg-terminals (?x)))))))
@@ -133,7 +133,7 @@
 
 (deftest-queries prolog-dcg-if-then-else-threads-condition-stream
     ((make-rulebase
-      :clauses (list (cl-prolog::%expand-prolog-dcg-clause
+      :clauses (list (cl-prolog-kit::%expand-prolog-dcg-clause
                       'p
                       '(if-then-else
                         (dcg-terminals (a))
@@ -146,8 +146,8 @@
 
 (deftest-queries prolog-dcg-goal-handles-empty-and-flat-conjunction-bodies
     ((make-rulebase
-      :clauses (list (cl-prolog::%expand-prolog-dcg-clause 'empty-rule nil)
-                     (cl-prolog::%expand-prolog-dcg-clause
+      :clauses (list (cl-prolog-kit::%expand-prolog-dcg-clause 'empty-rule nil)
+                     (cl-prolog-kit::%expand-prolog-dcg-clause
                       'flat-rule
                       '(and (dcg-terminals (a))
                             (dcg-terminals (b))

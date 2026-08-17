@@ -1,6 +1,6 @@
 ;;;; Prolog module namespace data and deterministic name resolution.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defconstant +default-prolog-module+ 'user)
 

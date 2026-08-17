@@ -1,6 +1,6 @@
 ;;;; library(pairs): relate a list of Key-Value pairs to its keys and values.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %pairs-pair (key value)
   (list (%text-atom "-") key value))

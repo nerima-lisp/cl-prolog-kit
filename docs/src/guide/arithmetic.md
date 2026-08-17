@@ -1,6 +1,6 @@
 # Arithmetic and Comparison
 
-cl-prolog evaluates arithmetic through the `is/2` goal and a family of
+cl-prolog-kit evaluates arithmetic through the `is/2` goal and a family of
 comparison goals. Expressions are written as **prefix, Lisp-shaped terms** —
 `(+ 20 (* 2 11))`, not the infix `20 + 2 * 11` of textbook Prolog.
 
@@ -191,7 +191,7 @@ for how guards are evaluated at proof time.
 ## Finite-domain constraints
 
 For constraint-style integer reasoning — as opposed to one-shot evaluation —
-cl-prolog also ships finite-domain (FD) goals. These constrain variables and
+cl-prolog-kit also ships finite-domain (FD) goals. These constrain variables and
 enumerate solutions rather than evaluating a ground expression.
 
 ### Domain assignment

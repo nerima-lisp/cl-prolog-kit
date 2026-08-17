@@ -2,7 +2,7 @@
 ;;;; then scanning it into %token structs against an operator table's
 ;;;; lexemes (lexer-operator-lexemes.lisp), under lexer.lisp's resource
 ;;;; limits.
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defmacro %scan-prolog-quoted-lexeme (delimiter unterminated-message)
   `(progn

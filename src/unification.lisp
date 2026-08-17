@@ -6,7 +6,7 @@
 ;;;; Variable identity lives in logic-variable.lisp and the environment
 ;;;; index it unifies against lives in environment-index.lisp.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defconstant +occurs-linear-threshold+ 8)
 (defconstant +unification-pair-primary-threshold+ 8)

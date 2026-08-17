@@ -1,8 +1,8 @@
 # API Reference
 
-The core `cl-prolog` system exposes the public `cl-prolog` package. This page
+The core `cl-prolog-kit` system exposes the public `cl-prolog-kit` package. This page
 lists every symbol exported by that package; the separately loaded public
-test-helper package `cl-prolog/weave` is documented in
+test-helper package `cl-prolog-kit/weave` is documented in
 [Development](../project/development.md).
 Anything not listed here is internal.
 
@@ -37,7 +37,7 @@ the Lisp representation of the exported `clause/2` builtin goal.
 - `prolog-atom-text` — the inverse: the string an atom prints as
 
 An atom is a Common Lisp symbol, but its symbol name is not its text — the text
-of `CL-PROLOG::PARENT` is `"parent"`. Bare symbols therefore spell exactly the
+of `CL-PROLOG-KIT::PARENT` is `"parent"`. Bare symbols therefore spell exactly the
 lower-case atoms; use `prolog-atom` for any other spelling. See
 [Semantics](semantics.md#atoms).
 
@@ -197,7 +197,7 @@ arities. See [Builtin goals](../guide/builtin-goals.md) for behavior-oriented gu
 
 The engine also implements a range of ISO goals callable from parsed Prolog
 source (via `consult`/`load_files` or `read-prolog-*`). Several of the goals
-listed below are exported as `cl-prolog` symbols, so Lisp code can use those
+listed below are exported as `cl-prolog-kit` symbols, so Lisp code can use those
 symbols as Prolog goal names in Lisp-shaped queries. Those exports are **not**
 ordinary Common Lisp host-function APIs: invoking the relation still happens
 through the Prolog query interface. Goals not called out as exported here are
@@ -262,8 +262,8 @@ indicator; see
 - **Process control:** `halt/0`, `halt/1` (raise the `prolog-halt` condition).
 
 !!! note "Exports and the Lisp API"
-    cl-prolog keeps a narrow exported package surface. The exported query-goal
-    names above are interned as `cl-prolog` symbols, but they denote Prolog
+    cl-prolog-kit keeps a narrow exported package surface. The exported query-goal
+    names above are interned as `cl-prolog-kit` symbols, but they denote Prolog
     relations when used in a Lisp-shaped query; they are not Common Lisp
     functions to call directly. The remaining goals in this section are
     available through parsed source and the query-goal vocabulary without being
@@ -319,4 +319,4 @@ termination.
 - `nix run .` — run the cl-weave-backed ASDF regression suite on
   `x86_64-linux` or Apple Silicon (`aarch64-darwin`); use ASDF directly on
   other environments
-- `asdf:load-system :cl-prolog/examples` — load runnable examples
+- `asdf:load-system :cl-prolog-kit/examples` — load runnable examples

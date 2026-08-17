@@ -3,11 +3,11 @@
 ;;;; Treats direct call edges between two functions as an "interference":
 ;;;; COLOR-CALL-GRAPH assigns each defined function a color in 1..N such
 ;;;; that no two functions connected by a direct call share a color, using
-;;;; cl-prolog's finite-domain constraint solver (CL-PROLOG:INS domain
-;;;; restriction, pairwise CL-PROLOG:|#\=| disequality, CL-PROLOG:LABELING
+;;;; cl-prolog-kit's finite-domain constraint solver (CL-PROLOG-KIT:INS domain
+;;;; restriction, pairwise CL-PROLOG-KIT:|#\=| disequality, CL-PROLOG-KIT:LABELING
 ;;;; search) rather than a hand-rolled greedy-coloring algorithm.
 
-(in-package #:cl-prolog/callgraph)
+(in-package #:cl-prolog-kit/callgraph)
 
 (defun %call-graph-edges (call-graph)
   "Return the undirected edge set of CALL-GRAPH as (A . B) pairs with A < B
@@ -29,23 +29,23 @@ coloring exists."
   (let* ((names (call-graph-defined call-graph))
          (var-alist (mapcar (lambda (name)
                                (cons name (intern (format nil "?COLOR-~A" (symbol-name name))
-                                                   :cl-prolog/callgraph)))
+                                                   :cl-prolog-kit/callgraph)))
                              names))
          (vars (mapcar #'cdr var-alist))
          (edges (%call-graph-edges call-graph))
-         (domain-goal `(cl-prolog:ins ,vars (1 cl-prolog:|..| ,num-colors)))
+         (domain-goal `(cl-prolog-kit:ins ,vars (1 cl-prolog-kit:|..| ,num-colors)))
          (disequality-goals
            (mapcar (lambda (edge)
-                     `(cl-prolog:|#\\=| ,(cdr (assoc (car edge) var-alist))
+                     `(cl-prolog-kit:|#\\=| ,(cdr (assoc (car edge) var-alist))
                                           ,(cdr (assoc (cdr edge) var-alist))))
                    edges))
-         (labeling-goal `(cl-prolog:labeling nil ,vars))
+         (labeling-goal `(cl-prolog-kit:labeling nil ,vars))
          (goal (reduce (lambda (a b) `(and ,a ,b))
                         (append (list domain-goal) disequality-goals (list labeling-goal)))))
     (when vars
-      (let ((solution (cl-prolog:query-prolog-first (call-graph-rulebase call-graph) goal)))
+      (let ((solution (cl-prolog-kit:query-prolog-first (call-graph-rulebase call-graph) goal)))
         (when solution
-          (mapcar (lambda (pair) (cons (car pair) (cl-prolog:solution-binding (cdr pair) solution)))
+          (mapcar (lambda (pair) (cons (car pair) (cl-prolog-kit:solution-binding (cdr pair) solution)))
                   var-alist))))))
 
 (defun valid-coloring-p (call-graph coloring)

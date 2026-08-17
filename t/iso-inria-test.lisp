@@ -11,14 +11,14 @@
 ;;;; together.  Expected is `success', `failure', an ISO error term, or a list of
 ;;;; solution substitutions written with the suite's `<--' operator.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (defun inria-suite-directory ()
   "Where the vendored corpus lives.
 
 Resolved through ASDF rather than *LOAD-PATHNAME*, which points at the fasl
 cache once the suite is compiled."
-  (asdf:system-relative-pathname :cl-prolog/test "t/iso/inriasuite/"))
+  (asdf:system-relative-pathname :cl-prolog-kit/test "t/iso/inriasuite/"))
 
 (defparameter +inria-conformance-floor+ 431
   "The corpus score this engine is known to reach.
@@ -31,23 +31,23 @@ test; raise it when the score improves and a regression will fail here.")
 
 (defun inria-operator-table ()
   "The standard table plus the `<--' the corpus writes substitutions with."
-  (cl-prolog::%operator-table-define
-   cl-prolog::*standard-operator-table*
-   (cl-prolog:prolog-atom "<--")
+  (cl-prolog-kit::%operator-table-define
+   cl-prolog-kit::*standard-operator-table*
+   (cl-prolog-kit:prolog-atom "<--")
    +inria-substitution-operator-priority+
    :xfx))
 
 (defun inria-case-goal-and-expectation (form)
   "Return a corpus FORM's goal and expected result, or NIL if it is not a case."
-  (let ((head (and (cl-prolog:clause-p form) (cl-prolog:clause-head form))))
+  (let ((head (and (cl-prolog-kit:clause-p form) (cl-prolog-kit:clause-head form))))
     (when (and (consp head) (= 2 (length head)))
       (values (first head) (second head)))))
 
 (defun inria-error-formal (term)
   "Return the formal part of an `error(Formal, _)' term, or NIL."
   (when (and (consp term)
-             (cl-prolog::%same-atom-text-p (first term)
-                                           (cl-prolog:prolog-atom "error"))
+             (cl-prolog-kit::%same-atom-text-p (first term)
+                                           (cl-prolog-kit:prolog-atom "error"))
              (= 3 (length term)))
     (second term)))
 
@@ -72,9 +72,9 @@ KIND is :SOLUTIONS with the solution list, :ERROR with the raised formal term,
 or :HOST-CONDITION with the condition type -- which is itself a conformance
 failure, since Prolog code is owed a catchable error rather than a Lisp one."
   (handler-case
-      (values :solutions (cl-prolog:query-prolog (inria-rulebase) (list goal)))
-    (cl-prolog:prolog-exception (condition)
-      (let ((term (cl-prolog:prolog-exception-term condition)))
+      (values :solutions (cl-prolog-kit:query-prolog (inria-rulebase) (list goal)))
+    (cl-prolog-kit:prolog-exception (condition)
+      (let ((term (cl-prolog-kit:prolog-exception-term condition)))
         (values :error (or (inria-error-formal term) term))))
     (error (condition)
       (values :host-condition (type-of condition)))))
@@ -83,7 +83,7 @@ failure, since Prolog code is owed a catchable error rather than a Lisp one."
   "True when the outcome (KIND DATUM) meets the corpus's EXPECTED result."
   (flet ((atom-named-p (term name)
            (and (symbolp term)
-                (string= name (cl-prolog:prolog-atom-text term)))))
+                (string= name (cl-prolog-kit:prolog-atom-text term)))))
     (cond
       ;; `success' and `failure' constrain only whether a proof exists.
       ((atom-named-p expected "success") (and (eq kind :solutions) datum t))
@@ -96,7 +96,7 @@ failure, since Prolog code is owed a catchable error rather than a Lisp one."
       ;; term like `type_error(atom, 1.23)', whose elements are not lists.  The
       ;; corpus's solution *count* is what is checkable without reimplementing
       ;; its substitution matcher, and a wrong count is the failure that matters.
-      ((and (cl-prolog::%proper-list-p expected)
+      ((and (cl-prolog-kit::%proper-list-p expected)
             (every #'consp expected))
        (and (eq kind :solutions)
             (= (length expected) (length datum))))
@@ -107,7 +107,7 @@ failure, since Prolog code is owed a catchable error rather than a Lisp one."
       ;; expected term is its way of saying "any culprit here", so the two are
       ;; unified rather than compared as text.
       (t (and (eq kind :error)
-              (nth-value 1 (cl-prolog:unify expected datum)))))))
+              (nth-value 1 (cl-prolog-kit:unify expected datum)))))))
 
 (defparameter +inria-non-test-files+ '("README" "file_manip" "halt")
   "Corpus files that hold no runnable cases.
@@ -129,7 +129,7 @@ than a `*.*' wildcard, which would match none of them."
   "Run every case in PATH.  Returns (VALUES TOTAL PASSED FAILURES)."
   (let ((total 0) (passed 0) (failures '()))
     (dolist (form (handler-case
-                      (cl-prolog:parse-prolog (uiop:read-file-string path) table)
+                      (cl-prolog-kit:parse-prolog (uiop:read-file-string path) table)
                     (error (condition)
                       (push (list :unreadable (type-of condition)) failures)
                       '()))
@@ -140,11 +140,11 @@ than a `*.*' wildcard, which would match none of them."
           (multiple-value-bind (kind datum) (inria-run-goal goal)
             (if (inria-expectation-satisfied-p expected kind datum)
                 (incf passed)
-                (push (list (cl-prolog:prolog-term-string goal)
-                            (cl-prolog:prolog-term-string expected)
+                (push (list (cl-prolog-kit:prolog-term-string goal)
+                            (cl-prolog-kit:prolog-term-string expected)
                             kind
                             (if (eq kind :error)
-                                (cl-prolog:prolog-term-string datum)
+                                (cl-prolog-kit:prolog-term-string datum)
                                 datum))
                       failures))))))))
 
@@ -156,7 +156,7 @@ invisible: its cases would simply not run."
   (let ((table (inria-operator-table))
         (unreadable '()))
     (dolist (path (inria-suite-files))
-      (handler-case (cl-prolog:parse-prolog (uiop:read-file-string path) table)
+      (handler-case (cl-prolog-kit:parse-prolog (uiop:read-file-string path) table)
         (error (condition)
           (push (cons (pathname-name path) (type-of condition)) unreadable))))
     (is (null unreadable)

@@ -1,6 +1,6 @@
-# cl-prolog
+# cl-prolog-kit
 
-`cl-prolog` is a small, **dependency-free** Prolog engine for Common Lisp, built
+`cl-prolog-kit` is a small, **dependency-free** Prolog engine for Common Lisp, built
 around three ideas:
 
 - **macro-first rule definition** — clauses are data, macros own the syntax
@@ -8,17 +8,17 @@ around three ideas:
   callers choose streaming or collection
 - **data / logic separation** — rulebases are plain structs the engine walks
 
-The public package is `cl-prolog`. It implements a focused Prolog runtime rather
+The public package is `cl-prolog-kit`. It implements a focused Prolog runtime rather
 than mirroring every facility of a standalone ISO Prolog system.
 
 ## Quick start
 
 ```lisp
 (require :asdf)
-(asdf:load-asd (truename "cl-prolog.asd")) ; run from the repository root
-(asdf:load-system :cl-prolog)
+(asdf:load-asd (truename "cl-prolog-kit.asd")) ; run from the repository root
+(asdf:load-system :cl-prolog-kit)
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (define-rulebase *family*
   ((parent tom bob))
@@ -101,32 +101,32 @@ variables are `?`-prefixed symbols.
   [parser resource limits](reference/parser-limits.md).
 - **Foreign predicates** via `define-foreign-predicate` as the supported
   extension surface.
-- **Call graph analysis** (`cl-prolog/callgraph`) — Prolog-backed reachability,
+- **Call graph analysis** (`cl-prolog-kit/callgraph`) — Prolog-backed reachability,
   dead-code and mutual-recursion detection, and FD-constraint graph coloring
   over any caller/callee edge set. See
   [Call Graph Analysis](reference/callgraph.md).
 
 ## Install
 
-cl-prolog is not currently distributed by Quicklisp. Clone the repository and
+cl-prolog-kit is not currently distributed by Quicklisp. Clone the repository and
 either load its ASDF definition directly or place the checkout in a directory
 configured in your
 [ASDF source registry](https://asdf.common-lisp.dev/asdf.html#Configuring-ASDF).
 
 ```sh
-git clone https://github.com/nerima-lisp/cl-prolog.git
-cd cl-prolog
+git clone https://github.com/nerima-lisp/cl-prolog-kit.git
+cd cl-prolog-kit
 sbcl --non-interactive \
   --eval '(require :asdf)' \
-  --eval '(asdf:load-asd (truename "cl-prolog.asd"))' \
-  --eval '(asdf:load-system :cl-prolog)'
+  --eval '(asdf:load-asd (truename "cl-prolog-kit.asd"))' \
+  --eval '(asdf:load-system :cl-prolog-kit)'
 ```
 
 To run the cl-weave regression suite through the Nix app on `x86_64-linux` or
 Apple Silicon (`aarch64-darwin`):
 
 ```sh
-nix run github:nerima-lisp/cl-prolog
+nix run github:nerima-lisp/cl-prolog-kit
 ```
 
 See [Getting Started](getting-started.md) for the full matrix of load paths;
@@ -146,5 +146,5 @@ repository rather than copied into each of the 21 packages:
 What is specific to this package lives here: [Development](project/development.md) for
 the workflow, [Compatibility](reference/compatibility.md) for what the public surface
 promises, and the
-[releases](https://github.com/nerima-lisp/cl-prolog/releases)
+[releases](https://github.com/nerima-lisp/cl-prolog-kit/releases)
 for the per-entry history.

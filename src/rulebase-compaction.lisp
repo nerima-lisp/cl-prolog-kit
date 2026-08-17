@@ -5,7 +5,7 @@
 ;;;; %RULEBASE-RETRACT-ENTRY!/%RULEBASE-RETRACT-ENTRIES!/
 ;;;; %REFRESH-RULEBASE-PREDICATE-DESCRIPTOR! there.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 ;;; Dead-entry compaction.
 ;;;

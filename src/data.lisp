@@ -5,7 +5,7 @@
 ;;;; lives in table-variant.lisp and source-load bookkeeping in
 ;;;; source-registry.lisp.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defstruct (rulebase (:copier nil) (:constructor %make-rulebase))
   "An ordered logical-update database of clauses."

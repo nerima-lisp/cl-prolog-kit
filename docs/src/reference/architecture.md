@@ -2,7 +2,7 @@
 
 ## Design Direction
 
-`cl-prolog` is a relational programming library embedded in Common Lisp. Its
+`cl-prolog-kit` is a relational programming library embedded in Common Lisp. Its
 main design choices are:
 
 - macro-first authoring: macros own syntax and produce runtime data
@@ -16,7 +16,7 @@ facility of a standalone ISO Prolog system.
 
 ## ASDF Load Order
 
-`cl-prolog.asd` is serial. The production system loads these components in
+`cl-prolog-kit.asd` is serial. The production system loads these components in
 this exact dependency order, which groups into layers:
 
 **Foundations** — packages, operator/module/source registries, the clause and

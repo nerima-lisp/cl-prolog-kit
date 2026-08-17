@@ -1,4 +1,4 @@
-;;;; The Lisp-level entry point for the cl-prolog regression suite.
+;;;; The Lisp-level entry point for the cl-prolog-kit regression suite.
 ;;;;
 ;;;;     sbcl --script run-tests.lisp
 ;;;;
@@ -12,7 +12,7 @@
 ;;;; checkout yourself.
 ;;;;
 ;;;; --script implies --disable-debugger, so an unhandled error — including the
-;;;; one cl-prolog/test's test-op signals on a failing suite — exits non-zero
+;;;; one cl-prolog-kit/test's test-op signals on a failing suite — exits non-zero
 ;;;; with a backtrace rather than dropping into the REPL.
 (require :asdf)
 
@@ -21,10 +21,10 @@
 ;;; that checks.default passes as an absolute argument.
 (let ((root
       (make-pathname :name nil :type nil :version nil :defaults *load-truename*)))
-  (asdf:load-asd (merge-pathnames "cl-prolog.asd" root)))
+  (asdf:load-asd (merge-pathnames "cl-prolog-kit.asd" root)))
 
 (progn
-  (asdf:load-system "cl-prolog/test")
-  (asdf:load-system "cl-prolog/callgraph/test")
+  (asdf:load-system "cl-prolog-kit/test")
+  (asdf:load-system "cl-prolog-kit/callgraph/test")
   (unless (uiop:symbol-call "CL-WEAVE" "RUN-ALL" :reporter :spec)
-    (error "cl-prolog cl-weave test suites failed.")))
+    (error "cl-prolog-kit cl-weave test suites failed.")))

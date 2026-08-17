@@ -1,6 +1,6 @@
 # Conditions and Errors
 
-cl-prolog surfaces failures through the Common Lisp condition system. This page
+cl-prolog-kit surfaces failures through the Common Lisp condition system. This page
 catalogues the exported condition types, their readers, and when each is
 signalled. The one-line symbol index also appears in the
 [API Reference](api.md#conditions).

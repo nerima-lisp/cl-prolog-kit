@@ -9,7 +9,7 @@
 ;;;; the file self-contained.
 (in-package #:asdf-user)
 
-(asdf:defsystem "cl-prolog"
+(asdf:defsystem "cl-prolog-kit"
   :description "A small, dependency-free Common Lisp Prolog engine."
   :long-description "A macro-first Common Lisp Prolog engine with CPS proof search, an extensible builtin registry, and a compact rule DSL."
   :author "takeokunn <bararararatty@gmail.com>"
@@ -18,11 +18,11 @@
   ;; Single source of truth for the version. flake.nix parses this exact form
   ;; (first match wins) and release.yml refuses to publish a tag that
   ;; disagrees with it, so a release edits this one line.
-  :version "1.4.3"
-  :homepage "https://github.com/nerima-lisp/cl-prolog"
-  :bug-tracker "https://github.com/nerima-lisp/cl-prolog/issues"
-  :source-control (:git "https://github.com/nerima-lisp/cl-prolog.git")
-  :long-name "cl-prolog"
+  :version "1.5.0"
+  :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
+  :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
+  :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
+  :long-name "cl-prolog-kit"
   :pathname "src"
   :serial t
   :components ((:file "package")
@@ -92,18 +92,18 @@
                (:file "dsl-compiler")
                (:file "dsl")
                (:file "dcg"))
-  :in-order-to ((asdf:test-op (asdf:test-op "cl-prolog/test"))))
+  :in-order-to ((asdf:test-op (asdf:test-op "cl-prolog-kit/test"))))
 
-(asdf:defsystem "cl-prolog/weave"
-  :description "cl-weave helpers for testing cl-prolog queries."
+(asdf:defsystem "cl-prolog-kit/weave"
+  :description "cl-weave helpers for testing cl-prolog-kit queries."
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.4.3"
-  :homepage "https://github.com/nerima-lisp/cl-prolog"
-  :bug-tracker "https://github.com/nerima-lisp/cl-prolog/issues"
-  :source-control (:git "https://github.com/nerima-lisp/cl-prolog.git")
-  :depends-on (#:cl-prolog #:cl-weave)
+  :version "1.5.0"
+  :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
+  :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
+  :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
+  :depends-on (#:cl-prolog-kit #:cl-weave)
   :pathname "src"
   ;; :serial t so package-weave.lisp is loaded before the file that reads
   ;; symbols into the package it declares.
@@ -111,18 +111,18 @@
   :components ((:file "package-weave")
                (:file "weave")))
 
-;;; The test system is `cl-prolog/test` — singular, slash-separated — with
-;;; :pathname "t". It is NOT `cl-prolog-test` and NOT `cl-prolog/tests`.
-(asdf:defsystem "cl-prolog/test"
-  :description "Test system for cl-prolog."
+;;; The test system is `cl-prolog-kit/test` — singular, slash-separated — with
+;;; :pathname "t". It is NOT `cl-prolog-kit-test` and NOT `cl-prolog-kit/tests`.
+(asdf:defsystem "cl-prolog-kit/test"
+  :description "Test system for cl-prolog-kit."
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.4.3"
-  :homepage "https://github.com/nerima-lisp/cl-prolog"
-  :bug-tracker "https://github.com/nerima-lisp/cl-prolog/issues"
-  :source-control (:git "https://github.com/nerima-lisp/cl-prolog.git")
-  :depends-on (#:cl-prolog/weave)
+  :version "1.5.0"
+  :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
+  :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
+  :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
+  :depends-on (#:cl-prolog-kit/weave)
   :pathname "t"
   :serial t
   :components ((:file "package")
@@ -176,18 +176,18 @@
   :perform (asdf:test-op (op c)
              (declare (ignore op c))
              (unless (uiop:symbol-call "CL-WEAVE" "RUN-ALL" :reporter :spec)
-               (error "cl-prolog cl-weave test suite failed."))))
+               (error "cl-prolog-kit cl-weave test suite failed."))))
 
-(asdf:defsystem "cl-prolog/examples"
-  :description "Runnable examples for cl-prolog."
+(asdf:defsystem "cl-prolog-kit/examples"
+  :description "Runnable examples for cl-prolog-kit."
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.4.3"
-  :homepage "https://github.com/nerima-lisp/cl-prolog"
-  :bug-tracker "https://github.com/nerima-lisp/cl-prolog/issues"
-  :source-control (:git "https://github.com/nerima-lisp/cl-prolog.git")
-  :depends-on (#:cl-prolog)
+  :version "1.5.0"
+  :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
+  :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
+  :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
+  :depends-on (#:cl-prolog-kit)
   :serial t
   :pathname "examples"
   :components ((:file "quick-start")
@@ -200,40 +200,40 @@
 ;;; of nerima-lisp/cl-cc's packages/prolog-tools, which paired this with a
 ;;; thin adapter walking cl-cc's own AST nodes; cl-cc now depends on this
 ;;; system and keeps only that adapter.
-(asdf:defsystem "cl-prolog/callgraph"
+(asdf:defsystem "cl-prolog-kit/callgraph"
   :description "Generic Prolog-backed call-graph analysis (reachability, dead-code, FD-constraint coloring, edge-notation DCG)."
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.4.3"
-  :homepage "https://github.com/nerima-lisp/cl-prolog"
-  :bug-tracker "https://github.com/nerima-lisp/cl-prolog/issues"
-  :source-control (:git "https://github.com/nerima-lisp/cl-prolog.git")
-  :depends-on (#:cl-prolog)
+  :version "1.5.0"
+  :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
+  :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
+  :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
+  :depends-on (#:cl-prolog-kit)
   :serial t
   :pathname "callgraph"
   :components ((:file "package")
                (:file "call-graph")
                (:file "edge-dcg")
                (:file "graph-coloring"))
-  :in-order-to ((asdf:test-op (asdf:test-op "cl-prolog/callgraph/test"))))
+  :in-order-to ((asdf:test-op (asdf:test-op "cl-prolog-kit/callgraph/test"))))
 
-;;; A separate secondary system, not folded into `cl-prolog/test`: this
+;;; A separate secondary system, not folded into `cl-prolog-kit/test`: this
 ;;; keeps callgraph's cl-weave dependency scoped to exactly the package it
-;;; tests, mirrors `cl-prolog/callgraph` living in its own directory, and
-;;; lets it be run in isolation (`(asdf:test-system "cl-prolog/callgraph")`)
+;;; tests, mirrors `cl-prolog-kit/callgraph` living in its own directory, and
+;;; lets it be run in isolation (`(asdf:test-system "cl-prolog-kit/callgraph")`)
 ;;; the same way nerima-lisp/cl-cc's own packages/prolog-tools test system
 ;;; was run independently of that repo's umbrella test aggregate.
-(asdf:defsystem "cl-prolog/callgraph/test"
-  :description "cl-weave test suite for cl-prolog/callgraph."
+(asdf:defsystem "cl-prolog-kit/callgraph/test"
+  :description "cl-weave test suite for cl-prolog-kit/callgraph."
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.4.3"
-  :homepage "https://github.com/nerima-lisp/cl-prolog"
-  :bug-tracker "https://github.com/nerima-lisp/cl-prolog/issues"
-  :source-control (:git "https://github.com/nerima-lisp/cl-prolog.git")
-  :depends-on (#:cl-prolog/callgraph #:cl-weave)
+  :version "1.5.0"
+  :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
+  :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
+  :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
+  :depends-on (#:cl-prolog-kit/callgraph #:cl-weave)
   :serial t
   :pathname "callgraph/test"
   :components ((:file "package")
@@ -243,4 +243,4 @@
   :perform (asdf:test-op (op c)
              (declare (ignore op c))
              (unless (uiop:symbol-call "CL-WEAVE" "RUN-ALL" :reporter :spec)
-               (error "cl-prolog/callgraph cl-weave test suite failed."))))
+               (error "cl-prolog-kit/callgraph cl-weave test suite failed."))))

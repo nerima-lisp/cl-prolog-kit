@@ -39,7 +39,7 @@ Lisp package symbols.
   `(nth0 ?i ?list ?x)`, `(nth1 ?i ?list ?x)`, `(last ?list ?x)`, and
   `(is_list ?l)` define relations over proper and partially instantiated
   lists. `memberchk/2` commits to the first match. Unlike the list-library
-  goals below, none of these is exported as a `cl-prolog` symbol; they are
+  goals below, none of these is exported as a `cl-prolog-kit` symbol; they are
   source/query-goal vocabulary only (see
   [Prolog-Source and Query Goals](../reference/api.md#prolog-source-and-query-goals)).
 - **List library (`library(lists)`):** `(sum_list ?l ?sum)` (alias

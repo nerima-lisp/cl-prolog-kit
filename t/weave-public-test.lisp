@@ -1,19 +1,19 @@
-;;;; Tests for the public cl-prolog/cl-weave helpers.
+;;;; Tests for the public cl-prolog-kit/cl-weave helpers.
 
-(defpackage #:cl-prolog.weave.tests
+(defpackage #:cl-prolog-kit.weave.tests
   (:use #:cl)
-  (:import-from #:cl-prolog
+  (:import-from #:cl-prolog-kit
    #:copy-rulebase
    #:invalid-max-depth-error
    #:make-clause
    #:prolog
    #:query-prolog
    #:rulebase-insert-clause!)
-  (:import-from #:cl-prolog/weave
+  (:import-from #:cl-prolog-kit/weave
    #:assert-query
    #:deftest-queries))
 
-(in-package #:cl-prolog.weave.tests)
+(in-package #:cl-prolog-kit.weave.tests)
 
 (defun make-weave-rulebase ()
   (prolog
@@ -34,10 +34,10 @@
 
 (deftest-queries fresh-query-rulebases ((prolog ((seed value))))
   ("a case may mutate its rulebase"
-   (cl-prolog:assertz (temporary value))
+   (cl-prolog-kit:assertz (temporary value))
    :succeeds)
   ("the next case does not observe that mutation"
-   (cl-prolog:current_predicate (/ temporary 1))
+   (cl-prolog-kit:current_predicate (/ temporary 1))
    :fails))
 
 (cl-weave:describe-sequential "assert-query"
@@ -50,42 +50,42 @@
 (cl-weave:describe-sequential "query-spec-parsing-rejects-malformed-input"
   (cl-weave:it "an :ordered/:set/:first kind requires an expected value"
     (cl-weave:expect
-     (lambda () (cl-prolog/weave::%split-query-assertion :ordered '()))
+     (lambda () (cl-prolog-kit/weave::%split-query-assertion :ordered '()))
      :to-throw))
 
   (cl-weave:it "an unknown assertion kind is rejected"
     (cl-weave:expect
-     (lambda () (cl-prolog/weave::%split-query-assertion :bogus '(1)))
+     (lambda () (cl-prolog-kit/weave::%split-query-assertion :bogus '(1)))
      :to-throw))
 
   (cl-weave:it "a non-list query specification is rejected"
     (cl-weave:expect
-     (lambda () (cl-prolog/weave::%parse-query-spec 'not-a-list))
+     (lambda () (cl-prolog-kit/weave::%parse-query-spec 'not-a-list))
      :to-throw))
 
   (cl-weave:it "a query specification missing an assertion kind is rejected"
     (cl-weave:expect
-     (lambda () (cl-prolog/weave::%parse-query-spec '((parent alice ?child))))
+     (lambda () (cl-prolog-kit/weave::%parse-query-spec '((parent alice ?child))))
      :to-throw))
 
   (cl-weave:it "a :signals kind with a non-keyword leading argument treats it as the expected type"
     (cl-weave:expect
      (multiple-value-list
-      (cl-prolog/weave::%split-query-assertion
+      (cl-prolog-kit/weave::%split-query-assertion
        :signals '(prolog-type-error :limit 5)))
      :to-equal '(prolog-type-error (:limit 5))))
 
   (cl-weave:it "a :signals kind with only keyword options has no expected type"
     (cl-weave:expect
      (multiple-value-list
-      (cl-prolog/weave::%split-query-assertion :signals '(:max-depth 16)))
+      (cl-prolog-kit/weave::%split-query-assertion :signals '(:max-depth 16)))
      :to-equal '(nil (:max-depth 16))))
 
   (cl-weave:it "a :signals kind without an expected type builds a bare throw assertion"
     (cl-weave:expect
-     (cl-prolog/weave::%query-assertion-form 'rulebase '(true) :signals '())
+     (cl-prolog-kit/weave::%query-assertion-form 'rulebase '(true) :signals '())
      :to-equal '(cl-weave:expect
-                 (lambda () (cl-prolog:query-prolog rulebase '(true)))
+                 (lambda () (cl-prolog-kit:query-prolog rulebase '(true)))
                  :to-throw))))
 
 (cl-weave:describe-sequential "copy-rulebase"
@@ -103,20 +103,20 @@
   (cl-weave:it "copies nested clause terms while preserving variable aliases"
     (let* ((variable '?item)
            (original
-             (cl-prolog:make-rulebase
+             (cl-prolog-kit:make-rulebase
               :clauses
               (list (make-clause
                      (list 'linked variable (list 'node variable))
                      (list (list 'seen (list 'node variable)))))))
            (copy (copy-rulebase original))
            (original-clause
-             (first (cl-prolog:rulebase-visible-clauses original)))
+             (first (cl-prolog-kit:rulebase-visible-clauses original)))
            (copied-clause
-             (first (cl-prolog:rulebase-visible-clauses copy)))
-           (original-head (cl-prolog:clause-head original-clause))
-           (copied-head (cl-prolog:clause-head copied-clause))
-           (original-body (cl-prolog:clause-body original-clause))
-           (copied-body (cl-prolog:clause-body copied-clause)))
+             (first (cl-prolog-kit:rulebase-visible-clauses copy)))
+           (original-head (cl-prolog-kit:clause-head original-clause))
+           (copied-head (cl-prolog-kit:clause-head copied-clause))
+           (original-body (cl-prolog-kit:clause-body original-clause))
+           (copied-body (cl-prolog-kit:clause-body copied-clause)))
       (cl-weave:expect (eq original-clause copied-clause) :to-be-falsy)
       (cl-weave:expect
        (eq (second copied-head)

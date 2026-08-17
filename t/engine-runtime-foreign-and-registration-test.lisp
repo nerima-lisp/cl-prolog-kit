@@ -1,17 +1,17 @@
 ;;;; Foreign-predicate dispatch and define-builtin registration/macroexpansion
 ;;;; tests.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
-(cl-prolog::define-builtin (test-twice input output)
+(cl-prolog-kit::define-builtin (test-twice input output)
     (rulebase environment depth emit)
   (let ((value (logic-substitute input environment)))
     (when (numberp value)
-      (cl-prolog::%unify-emit output (* 2 value) environment emit))))
+      (cl-prolog-kit::%unify-emit output (* 2 value) environment emit))))
 
-(cl-prolog::define-builtin ((test-collect test-collect-alias) output &rest arguments)
+(cl-prolog-kit::define-builtin ((test-collect test-collect-alias) output &rest arguments)
     (rulebase environment depth emit)
-  (cl-prolog::%unify-emit output (copy-list arguments) environment emit))
+  (cl-prolog-kit::%unify-emit output (copy-list arguments) environment emit))
 
 (deftest foreign-predicate-cps-solutions ()
   (let ((rb (make-family-rulebase))
@@ -44,14 +44,14 @@
                              (rulebase environment depth emit)
                            (funcall emit environment)))
     (is (%tree-contains-p expansion 'defmethod))
-    (is (%tree-contains-p expansion 'cl-prolog::%foreign-goal-solver))
+    (is (%tree-contains-p expansion 'cl-prolog-kit::%foreign-goal-solver))
     (is (%tree-contains-p expansion 'foreign-example))
     (is (%tree-contains-p expansion 1))))
 
 (deftest define-foreign-predicate-rejects-a-variadic-argument-list ()
   (signals-error
     (macroexpand-1
-     '(cl-prolog::define-foreign-predicate
+     '(cl-prolog-kit::define-foreign-predicate
        (foreign-variadic-example value &rest more)
        (rulebase environment depth emit)
        (declare (cl:ignore rulebase environment depth more))
@@ -59,7 +59,7 @@
 
 (deftest iso-builtin-macro-treats-any-non-raw-compound-argument-as-resolvable ()
   (let ((expansion (macroexpand-1
-                     '(cl-prolog::define-iso-builtin
+                     '(cl-prolog-kit::define-iso-builtin
                        (test_iso_builtin_arg_shape (value :other)) "TEST"
                        nil))))
     (is (search "RESOLVED-VALUE" (format nil "~S" expansion)))))
@@ -163,20 +163,20 @@
               (query-prolog rulebase '(test-twice user-defined)))))
 
 (deftest builtin-solver-registration-replaces-conflicting-forms ()
-    (let ((cl-prolog::*fixed-builtin-solvers* (make-hash-table :test (function eq)))
-          (cl-prolog::*variadic-builtin-solvers* (make-hash-table :test (function eq)))
-          (cl-prolog::*builtin-predicate-indicators* (list)))
+    (let ((cl-prolog-kit::*fixed-builtin-solvers* (make-hash-table :test (function eq)))
+          (cl-prolog-kit::*variadic-builtin-solvers* (make-hash-table :test (function eq)))
+          (cl-prolog-kit::*builtin-predicate-indicators* (list)))
       (let ((predicate (gensym "PREDICATE"))
             (fixed (lambda (&rest ignored) (declare (ignore ignored))))
             (variadic (lambda (&rest ignored) (declare (ignore ignored))))
             (replacement (lambda (&rest ignored) (declare (ignore ignored)))))
-        (cl-prolog::%register-builtin-solver! predicate 1 1 fixed)
-        (is (eq fixed (cl-prolog::%goal-solver predicate 1)))
-        (cl-prolog::%register-builtin-solver! predicate 1 nil variadic)
-        (is (eq variadic (cl-prolog::%goal-solver predicate 1)))
-        (cl-prolog::%register-builtin-solver! predicate 2 2 replacement)
-        (is (null (cl-prolog::%goal-solver predicate 1)))
-        (is (eq replacement (cl-prolog::%goal-solver predicate 2))))))
+        (cl-prolog-kit::%register-builtin-solver! predicate 1 1 fixed)
+        (is (eq fixed (cl-prolog-kit::%goal-solver predicate 1)))
+        (cl-prolog-kit::%register-builtin-solver! predicate 1 nil variadic)
+        (is (eq variadic (cl-prolog-kit::%goal-solver predicate 1)))
+        (cl-prolog-kit::%register-builtin-solver! predicate 2 2 replacement)
+        (is (null (cl-prolog-kit::%goal-solver predicate 1)))
+        (is (eq replacement (cl-prolog-kit::%goal-solver predicate 2))))))
 
   (deftest define-builtin-supports-aliases-and-rest-arguments ()
   (is-equal '(((?arguments . (a b c))))
@@ -185,29 +185,29 @@
 
 (deftest define-builtin-macroexpand-registers-single-name ()
   (with-macroexpansion (expansion
-                        '(cl-prolog::define-builtin (twice input output)
+                        '(cl-prolog-kit::define-builtin (twice input output)
                            (rulebase environment depth emit)
-                           (cl-prolog::%unify-emit output
+                           (cl-prolog-kit::%unify-emit output
                                                    (* 2 (logic-substitute input environment))
                                                    environment
                                                    emit)))
-    (is (%tree-contains-p expansion 'cl-prolog::%register-builtin-solver!))
+    (is (%tree-contains-p expansion 'cl-prolog-kit::%register-builtin-solver!))
     (is (%tree-contains-p expansion 'eval-when))
     (is (%tree-contains-p expansion 'twice))))
 
 (deftest define-builtin-macroexpand-registers-aliases-and-rest ()
   (with-macroexpansion (expansion
-                        (quote (cl-prolog::define-builtin
+                        (quote (cl-prolog-kit::define-builtin
                                    ((collect collect-alias) output &rest arguments)
                                    (rulebase environment depth emit)
                                  (declare (cl:ignore output)
                                           (cl:ignorable arguments)
                                           (optimize speed))
-                                 (cl-prolog::%unify-emit output
+                                 (cl-prolog-kit::%unify-emit output
                                                          (copy-list arguments)
                                                          environment
                                                          emit))))
-    (is (%tree-contains-p expansion (quote cl-prolog::%register-builtin-solver!)))
+    (is (%tree-contains-p expansion (quote cl-prolog-kit::%register-builtin-solver!)))
     (is (%tree-contains-p expansion (quote eval-when)))
     (is (%tree-contains-p expansion (quote collect)))
     (is (%tree-contains-p expansion (quote collect-alias)))
@@ -223,7 +223,7 @@
 
 (defvar *observed-builtin-dispatch-argument* nil)
 
-  (cl-prolog::define-builtin (test-observe-builtin argument)
+  (cl-prolog-kit::define-builtin (test-observe-builtin argument)
       (rulebase environment depth emit)
     (setf *observed-builtin-dispatch-argument* argument)
     (funcall emit environment))

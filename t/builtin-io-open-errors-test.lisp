@@ -6,12 +6,12 @@
 ;;;; in builtin-io-terms-test.lisp; stream lifecycle lives in
 ;;;; builtin-io-streams-lifecycle-test.lisp.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (deftest io-boolean-option-rejects-an-unbound-value ()
   (handler-case
       (progn
-        (cl-prolog::%io-boolean '?value nil (cl-prolog::%iso-atom "TEST"))
+        (cl-prolog-kit::%io-boolean '?value nil (cl-prolog-kit::%iso-atom "TEST"))
         (error "Expected an unbound boolean option to be rejected"))
     (prolog-instantiation-error (condition)
       (declare (ignore condition))
@@ -19,40 +19,40 @@
 
 (deftest-io-queries io-builtins-reject-malformed-option-values ()
   ("read_term rejects an unbound syntax_errors value"
-   "ok." (cl-prolog::read_term ?term ((cl-prolog::syntax_errors ?policy)))
+   "ok." (cl-prolog-kit::read_term ?term ((cl-prolog-kit::syntax_errors ?policy)))
    :signals)
   ("read_term rejects a non-symbol syntax_errors value"
-   "ok." (cl-prolog::read_term ?term ((cl-prolog::syntax_errors 123)))
+   "ok." (cl-prolog-kit::read_term ?term ((cl-prolog-kit::syntax_errors 123)))
    :signals)
   ("the boolean option rejects a non-symbol value"
-   "" (cl-prolog::write_term hello ((cl-prolog::quoted 5)))
+   "" (cl-prolog-kit::write_term hello ((cl-prolog-kit::quoted 5)))
    :signals)
   ("put_char rejects a multi-character atom"
-   "" (cl-prolog::put_char cl-prolog::ab)
+   "" (cl-prolog-kit::put_char cl-prolog-kit::ab)
    :signals)
   ("put_char rejects a non-symbol character"
-   "" (cl-prolog::put_char 123)
+   "" (cl-prolog-kit::put_char 123)
    :signals)
   ("open rejects a non-symbol type option"
-   "" (cl-prolog::open cl-prolog::whatever cl-prolog.user-atoms::read ?stream
-                       ((cl-prolog::type 123)))
+   "" (cl-prolog-kit::open cl-prolog-kit::whatever cl-prolog-kit.user-atoms::read ?stream
+                       ((cl-prolog-kit::type 123)))
    :signals))
 
 (deftest-io-queries io-open-rejects-malformed-arguments ()
   ("open rejects a non-atom source"
-   "" (cl-prolog::open 123 cl-prolog.user-atoms::read ?stream)
+   "" (cl-prolog-kit::open 123 cl-prolog-kit.user-atoms::read ?stream)
    :signals prolog-type-error)
   ("open reports an existence error for a missing unquoted source"
-   "" (cl-prolog::open cl-prolog::nonexistent_io_open_test_source_xyz
-                       cl-prolog.user-atoms::read ?stream)
+   "" (cl-prolog-kit::open cl-prolog-kit::nonexistent_io_open_test_source_xyz
+                       cl-prolog-kit.user-atoms::read ?stream)
    :signals prolog-existence-error)
   ("open rejects an unsupported type option"
-   "" (cl-prolog::open cl-prolog::whatever cl-prolog.user-atoms::read ?stream
-                       ((cl-prolog::type cl-prolog::bogus)))
+   "" (cl-prolog-kit::open cl-prolog-kit::whatever cl-prolog-kit.user-atoms::read ?stream
+                       ((cl-prolog-kit::type cl-prolog-kit::bogus)))
    :signals prolog-domain-error)
   ("open rejects a non-atom alias"
-   "" (cl-prolog::open cl-prolog::whatever cl-prolog.user-atoms::read ?stream
-                       ((cl-prolog::alias 123)))
+   "" (cl-prolog-kit::open cl-prolog-kit::whatever cl-prolog-kit.user-atoms::read ?stream
+                       ((cl-prolog-kit::alias 123)))
    :signals prolog-type-error))
 
 (deftest io-open-reports-existence-error-for-a-missing-parent-directory ()
@@ -98,25 +98,25 @@ peek_byte/1's fallback when a stream cannot save and restore its position."))
 
 (deftest io-peek-byte-rejects-a-stream-without-file-position-support ()
   (with-io-rulebase (rulebase input output) ""
-    (let ((context (cl-prolog::rulebase-io-context rulebase))
+    (let ((context (cl-prolog-kit::rulebase-io-context rulebase))
           (stream (make-instance 'unseekable-binary-input-stream
                                  :bytes (list 65))))
-      (cl-prolog::%register-prolog-stream!
-       context stream :read :type :binary :alias 'cl-prolog::unseekable_input)
+      (cl-prolog-kit::%register-prolog-stream!
+       context stream :read :type :binary :alias 'cl-prolog-kit::unseekable_input)
       (assert-query rulebase
-                    (cl-prolog::peek_byte cl-prolog::unseekable_input ?byte)
+                    (cl-prolog-kit::peek_byte cl-prolog-kit::unseekable_input ?byte)
                     :signals))))
 
 (deftest io-set-stream-position-rejects-a-stream-without-file-position-support ()
   (with-io-rulebase (rulebase input output) ""
-    (let ((context (cl-prolog::rulebase-io-context rulebase))
+    (let ((context (cl-prolog-kit::rulebase-io-context rulebase))
           (stream (make-instance 'unseekable-binary-input-stream
                                  :bytes (list 65))))
-      (cl-prolog::%register-prolog-stream!
-       context stream :read :type :binary :alias 'cl-prolog::unseekable_input2)
+      (cl-prolog-kit::%register-prolog-stream!
+       context stream :read :type :binary :alias 'cl-prolog-kit::unseekable_input2)
       (assert-query rulebase
-                    (cl-prolog::set_stream_position
-                     cl-prolog::unseekable_input2 0)
+                    (cl-prolog-kit::set_stream_position
+                     cl-prolog-kit::unseekable_input2 0)
                     :signals))))
 
 (defclass unseekable-character-input-stream
@@ -138,17 +138,17 @@ exercising stream_property/2 on a stream that cannot report a position."))
 
 (deftest io-stream-property-reports-false-reposition-for-unseekable-stream ()
   (with-io-rulebase (rulebase input output) ""
-    (let ((context (cl-prolog::rulebase-io-context rulebase))
+    (let ((context (cl-prolog-kit::rulebase-io-context rulebase))
           (stream (make-instance 'unseekable-character-input-stream
                                  :characters (list #\a))))
-      (cl-prolog::%register-prolog-stream!
-       context stream :read :type :text :alias 'cl-prolog::unseekable_prop)
+      (cl-prolog-kit::%register-prolog-stream!
+       context stream :read :type :text :alias 'cl-prolog-kit::unseekable_prop)
       (assert-query rulebase
-                    (cl-prolog::stream_property
-                     cl-prolog::unseekable_prop (cl-prolog::reposition ?value))
-                    :ordered (((?value . cl-prolog::false))))
+                    (cl-prolog-kit::stream_property
+                     cl-prolog-kit::unseekable_prop (cl-prolog-kit::reposition ?value))
+                    :ordered (((?value . cl-prolog-kit::false))))
       (assert-query rulebase
-                    (cl-prolog::stream_property
-                     cl-prolog::unseekable_prop
-                     (cl-prolog.user-atoms::position ?p))
+                    (cl-prolog-kit::stream_property
+                     cl-prolog-kit::unseekable_prop
+                     (cl-prolog-kit.user-atoms::position ?p))
                     :fails))))

@@ -9,7 +9,7 @@ on:
       - "flake.lock"
       # The site version is derived from the .asd :version, so a release
       # commit that touches nothing else must still republish the site.
-      - "cl-prolog.asd"
+      - "cl-prolog-kit.asd"
       - ".github/workflows/docs.yml"
       - ".github/actions/nix-setup/action.yml"
   workflow_dispatch:

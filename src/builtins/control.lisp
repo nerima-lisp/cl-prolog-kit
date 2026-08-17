@@ -1,4 +1,4 @@
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 ;;; Control builtins
 
@@ -229,7 +229,7 @@ CLEANUP failure is ignored, while a condition raised by CLEANUP propagates."
     (when succeeded-p
       (funcall emit environment))))
 
-(define-builtin (cl-prolog.user-atoms::ignore goal)
+(define-builtin (cl-prolog-kit.user-atoms::ignore goal)
     (rulebase environment depth emit)
   (multiple-value-bind (goal-environment succeeded-p)
       (%first-proof-environment

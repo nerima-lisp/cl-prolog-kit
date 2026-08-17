@@ -1,4 +1,4 @@
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %arithmetic-function-table (arity)
   (case arity

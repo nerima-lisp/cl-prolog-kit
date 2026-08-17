@@ -1,7 +1,7 @@
 ;;;; Tabling (memoized resolution): left-recursion detection and the
 ;;;; declared-tabled-predicate answer cache built on top of core CPS
 ;;;; proof search.
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %replay-table-answers/k (goal state entry succeed)
   "Unify each currently eligible answer for ENTRY with GOAL and invoke SUCCEED."

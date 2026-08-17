@@ -1,21 +1,21 @@
-# cl-prolog
+# cl-prolog-kit
 
-[![CI](https://github.com/nerima-lisp/cl-prolog/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nerima-lisp/cl-prolog/actions/workflows/ci.yml)
+[![CI](https://github.com/nerima-lisp/cl-prolog-kit/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nerima-lisp/cl-prolog-kit/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-0a7a5a)](https://nerima-lisp.github.io/cl-prolog/)
+[![Documentation](https://img.shields.io/badge/docs-MkDocs%20Material-0a7a5a)](https://nerima-lisp.github.io/cl-prolog-kit/)
 
 A small, dependency-free Prolog engine for Common Lisp. Rulebases are plain
 data, proof search is continuation-passing, and the builtin goal set is
-extensible. The public package is `cl-prolog`.
+extensible. The public package is `cl-prolog-kit`.
 
 ## Quick Start
 
 ```lisp
 (require :asdf)
-(asdf:load-asd (truename "cl-prolog.asd")) ; run from the repository root
-(asdf:load-system :cl-prolog)
+(asdf:load-asd (truename "cl-prolog-kit.asd")) ; run from the repository root
+(asdf:load-system :cl-prolog-kit)
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (define-rulebase *family*
   ((parent tom bob))
@@ -35,37 +35,37 @@ Prolog source text works too:
 
 ## Install
 
-cl-prolog is not on Quicklisp. Clone it and load its ASDF definition, or put
+cl-prolog-kit is not on Quicklisp. Clone it and load its ASDF definition, or put
 the checkout on your [ASDF source registry](https://asdf.common-lisp.dev/asdf.html#Configuring-ASDF):
 
 ```sh
-git clone https://github.com/nerima-lisp/cl-prolog.git
+git clone https://github.com/nerima-lisp/cl-prolog-kit.git
 ```
 
-With Nix, `nix run github:nerima-lisp/cl-prolog` runs the regression suite, and
+With Nix, `nix run github:nerima-lisp/cl-prolog-kit` runs the regression suite, and
 as a flake input:
 
 ```nix
 # flake.nix
-inputs.cl-prolog = {
-  url = "github:nerima-lisp/cl-prolog/v1.4.3";
+inputs.cl-prolog-kit = {
+  url = "github:nerima-lisp/cl-prolog-kit/v1.5.0";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
 
-Note the pinned tag. A bare `github:nerima-lisp/cl-prolog` follows this
+Note the pinned tag. A bare `github:nerima-lisp/cl-prolog-kit` follows this
 repository's default branch, so a push here would break your build without
 warning.
 
 ## Documentation
 
-Full documentation is published at <https://nerima-lisp.github.io/cl-prolog/>.
+Full documentation is published at <https://nerima-lisp.github.io/cl-prolog-kit/>.
 The source for that site lives in [docs/src/](docs/src/).
 
-- [Getting Started](https://nerima-lisp.github.io/cl-prolog/getting-started/)
-- [Your First Program](https://nerima-lisp.github.io/cl-prolog/guide/first-program/)
-- [API Reference](https://nerima-lisp.github.io/cl-prolog/reference/api/)
-- [Architecture](https://nerima-lisp.github.io/cl-prolog/reference/architecture/)
+- [Getting Started](https://nerima-lisp.github.io/cl-prolog-kit/getting-started/)
+- [Your First Program](https://nerima-lisp.github.io/cl-prolog-kit/guide/first-program/)
+- [API Reference](https://nerima-lisp.github.io/cl-prolog-kit/reference/api/)
+- [Architecture](https://nerima-lisp.github.io/cl-prolog-kit/reference/architecture/)
 
 ## Development
 
@@ -86,7 +86,7 @@ is on `CL_SOURCE_REGISTRY`.
 See the org-wide [CONTRIBUTING](https://github.com/nerima-lisp/.github/blob/main/CONTRIBUTING.md)
 guide and the [package standard](https://github.com/nerima-lisp/.github/blob/main/PACKAGE_STANDARD.md).
 Release history is in the
-[releases](https://github.com/nerima-lisp/cl-prolog/releases).
+[releases](https://github.com/nerima-lisp/cl-prolog-kit/releases).
 
 ## Support
 

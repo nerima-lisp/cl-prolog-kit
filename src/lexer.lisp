@@ -4,7 +4,7 @@
 ;;;; structs the tokenizer (lexer-tokenizer.lisp) builds on. Operator-lexeme
 ;;;; table computation lives in lexer-operator-lexemes.lisp.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (progn
   (define-condition prolog-parse-error (error)

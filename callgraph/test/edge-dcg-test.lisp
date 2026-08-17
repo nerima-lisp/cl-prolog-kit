@@ -4,7 +4,7 @@
 ;;;; edge-dcg-tests.lisp: this code never touched cl-cc's AST, so only the
 ;;;; package changed.
 
-(in-package #:cl-prolog/callgraph/test)
+(in-package #:cl-prolog-kit/callgraph/test)
 
 (describe "edge-spec-well-formed-p"
   (it "accepts a single edge"

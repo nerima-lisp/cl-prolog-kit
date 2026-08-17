@@ -4,7 +4,7 @@
 ;;;; the clause storage and logical-update machinery in data.lisp, which loads
 ;;;; immediately before.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %rulebase-tabled-p (rulebase predicate arity
                            &optional (module +default-prolog-module+))

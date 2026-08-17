@@ -4,7 +4,7 @@
 ;;;; CPS contract: emit each solution environment as it is found, never
 ;;;; collect intermediate result lists.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %unify-emit (left right environment emit)
   "EMIT the extension of ENVIRONMENT that unifies LEFT with RIGHT, if any."

@@ -1,6 +1,6 @@
 # Extending the Engine
 
-cl-prolog exposes exactly one supported extension point: **foreign
+cl-prolog-kit exposes exactly one supported extension point: **foreign
 predicates**, defined with `define-foreign-predicate`. A foreign predicate is a
 Lisp function that participates in proof search using the engine's
 continuation-passing `emit` protocol. The internal builtin-definition machinery

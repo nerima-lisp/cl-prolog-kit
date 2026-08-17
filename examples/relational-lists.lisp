@@ -1,4 +1,4 @@
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (let ((rulebase (make-rulebase)))
   (format t "~&append(?l ?r (a b c)) => ~S~%"

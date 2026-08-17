@@ -40,8 +40,8 @@ so `[] == '[]'` holds and `atom_length([], 2)` succeeds.
 An atom is an ordinary Common Lisp symbol, which is what lets a Lisp-authored
 rulebase and a Prolog-authored one denote the same predicate: `(parent ?x ?y)`
 read by the Common Lisp reader and `parent(X, Y).` read by this engine's parser
-both arrive as `CL-PROLOG::PARENT`. The consequence is that a **symbol's name
-is not its atom's text**: the text of `CL-PROLOG::PARENT` is `"parent"`.
+both arrive as `CL-PROLOG-KIT::PARENT`. The consequence is that a **symbol's name
+is not its atom's text**: the text of `CL-PROLOG-KIT::PARENT` is `"parent"`.
 
 Write a bare symbol for any atom whose text is lower case. For anything else,
 call `prolog-atom` rather than writing a symbol literal, and `prolog-atom-text`
@@ -53,10 +53,10 @@ to go back:
 ;; => "FooBar"
 ```
 
-`cl-prolog::|FooBar|` is *not* that atom — its text is `"foobar"`, because the
+`cl-prolog-kit::|FooBar|` is *not* that atom — its text is `"foobar"`, because the
 bar syntax only escapes the Common Lisp reader, which is a different question
 from what the atom is called. Inside quoted data, where `prolog-atom` cannot be
-called, `#.(cl-prolog:prolog-atom "FooBar")` reads it at read time.
+called, `#.(cl-prolog-kit:prolog-atom "FooBar")` reads it at read time.
 
 ## Proof-search semantics
 

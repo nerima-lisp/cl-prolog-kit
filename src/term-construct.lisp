@@ -3,7 +3,7 @@
 ;;;; %term-unify-sequence (src/builtins/core.lisp) for multi-argument
 ;;;; unification.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (define-builtin (term_variables term variables) (rulebase environment depth emit)
   (%unify-emit variables

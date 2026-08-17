@@ -1,11 +1,11 @@
 ;;;; Query expectation helpers.
 ;;;;
-;;;; DEFTEST-QUERIES and ASSERT-QUERY are cl-prolog.tests's own query
+;;;; DEFTEST-QUERIES and ASSERT-QUERY are cl-prolog-kit.tests's own query
 ;;;; assertions no longer here: the suite dogfoods the public
-;;;; CL-PROLOG/WEAVE package (src/weave.lisp) directly, inherited via
-;;;; cl-prolog.tests's :USE clause.
+;;;; CL-PROLOG-KIT/WEAVE package (src/weave.lisp) directly, inherited via
+;;;; cl-prolog-kit.tests's :USE clause.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (defun prolog-goal-holds-p (source)
   "True when the goal SOURCE, read as Prolog source text, has a proof.

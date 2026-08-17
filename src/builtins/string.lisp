@@ -4,7 +4,7 @@
 ;;;; split_string.  Text inputs are coerced through %TEXT-OF, so any of atom /
 ;;;; string / number / code list / char list is accepted where SWI accepts text.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 ;;; string_length/2
 

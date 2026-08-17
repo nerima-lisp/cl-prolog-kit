@@ -1,9 +1,9 @@
 ;;;; ISO error-contract tests: invalid goals, error-constructor formal data,
 ;;;; catch/throw interaction with Prolog vs. host errors, and processor halt.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
-(cl-prolog::define-builtin (test-programmer-error)
+(cl-prolog-kit::define-builtin (test-programmer-error)
     (rulebase environment depth emit)
   (error "test-only Common Lisp programmer error"))
 
@@ -76,7 +76,7 @@
             (invalid-goal-error (condition)
               (invalid-goal-error-goal condition))))
   (:is
-   (let ((goal (list (cl-prolog::%prolog-symbol ":")
+   (let ((goal (list (cl-prolog-kit::%prolog-symbol ":")
                      'missing-module
                      (cons 'p 'tail))))
      (handler-case
@@ -86,7 +86,7 @@
        (invalid-goal-error (condition)
          (equal goal (invalid-goal-error-goal condition))))))
   (:equal '("INSTANTIATION_ERROR" "CALL")
-          (let ((goal (list (cl-prolog::%prolog-symbol ":")
+          (let ((goal (list (cl-prolog-kit::%prolog-symbol ":")
                             'missing-module
                             '?goal)))
             (handler-case
@@ -103,41 +103,41 @@
            (list
             (list 'prolog-instantiation-error
                   (lambda ()
-                    (cl-prolog::%raise-instantiation-error
-                     nil (cl-prolog::%iso-atom "TEST") "test"))
+                    (cl-prolog-kit::%raise-instantiation-error
+                     nil (cl-prolog-kit::%iso-atom "TEST") "test"))
                   "INSTANTIATION_ERROR")
             (list 'prolog-type-error
                   (lambda ()
-                    (cl-prolog::%raise-type-error
-                     "INTEGER" 'bad nil (cl-prolog::%iso-atom "TEST") "test"))
+                    (cl-prolog-kit::%raise-type-error
+                     "INTEGER" 'bad nil (cl-prolog-kit::%iso-atom "TEST") "test"))
                   "TYPE_ERROR")
             (list 'prolog-domain-error
                   (lambda ()
-                    (cl-prolog::%raise-domain-error
+                    (cl-prolog-kit::%raise-domain-error
                      "NOT_LESS_THAN_ZERO" -1 nil
-                     (cl-prolog::%iso-atom "TEST") "test"))
+                     (cl-prolog-kit::%iso-atom "TEST") "test"))
                   "DOMAIN_ERROR")
             (list 'prolog-permission-error
                   (lambda ()
-                    (cl-prolog::%raise-permission-error
+                    (cl-prolog-kit::%raise-permission-error
                      "MODIFY" "STATIC_PROCEDURE" 'test nil
-                     (cl-prolog::%iso-atom "TEST") "test"))
+                     (cl-prolog-kit::%iso-atom "TEST") "test"))
                   "PERMISSION_ERROR")
             (list 'prolog-existence-error
                   (lambda ()
-                    (cl-prolog::%raise-existence-error
+                    (cl-prolog-kit::%raise-existence-error
                      "PROCEDURE" 'missing nil
-                     (cl-prolog::%iso-atom "TEST") "test"))
+                     (cl-prolog-kit::%iso-atom "TEST") "test"))
                   "EXISTENCE_ERROR")
             (list 'prolog-evaluation-error
                   (lambda ()
-                    (cl-prolog::%raise-evaluation-error
-                     "ZERO_DIVISOR" nil (cl-prolog::%iso-atom "TEST") "test"))
+                    (cl-prolog-kit::%raise-evaluation-error
+                     "ZERO_DIVISOR" nil (cl-prolog-kit::%iso-atom "TEST") "test"))
                   "EVALUATION_ERROR")
             (list 'prolog-resource-error
                   (lambda ()
-                    (cl-prolog::%raise-resource-error
-                     "DEPTH_LIMIT" nil (cl-prolog::%iso-atom "TEST") "test"))
+                    (cl-prolog-kit::%raise-resource-error
+                     "DEPTH_LIMIT" nil (cl-prolog-kit::%iso-atom "TEST") "test"))
                   "RESOURCE_ERROR")))
     (destructuring-bind (condition-type thunk formal-name) case
       (let* ((condition (capture-prolog-condition thunk))
@@ -201,13 +201,13 @@
         (simple-error () t))))
 
 (deftest-table query-normalization-internals ()
-  (:equal '() (cl-prolog::%normalize-query nil))
+  (:equal '() (cl-prolog-kit::%normalize-query nil))
   (:equal '((parent tom bob))
-          (cl-prolog::%normalize-query '(parent tom bob)))
+          (cl-prolog-kit::%normalize-query '(parent tom bob)))
   (:equal '((parent tom bob) (parent bob alice))
-          (cl-prolog::%normalize-query '((parent tom bob) (parent bob alice))))
-  (:equal '(!) (cl-prolog::%normalize-query '!))
-  (:is-not (eq (cl-prolog::%make-cut-tag) (cl-prolog::%make-cut-tag))
+          (cl-prolog-kit::%normalize-query '((parent tom bob) (parent bob alice))))
+  (:equal '(!) (cl-prolog-kit::%normalize-query '!))
+  (:is-not (eq (cl-prolog-kit::%make-cut-tag) (cl-prolog-kit::%make-cut-tag))
            "Every cut barrier must carry a distinct catch tag"))
 
 (deftest halt-requests-processor-exit ()
@@ -216,13 +216,13 @@
              (handler-case
                  (progn (query-prolog rulebase query) :no-halt)
                (prolog-halt (condition) (prolog-halt-code condition)))))
-      (is-equal 0 (halt-code '((cl-prolog::halt))))
-      (is-equal 7 (halt-code '((cl-prolog::halt 7))))
+      (is-equal 0 (halt-code '((cl-prolog-kit::halt))))
+      (is-equal 7 (halt-code '((cl-prolog-kit::halt 7))))
       ;; catch/3 must not intercept a halt request.
-      (is-equal 2 (halt-code '((cl-prolog::catch (cl-prolog::halt 2)
-                                                 ?any cl-prolog:true))))
-      (signals-error (query-prolog rulebase '((cl-prolog::halt ?code))))
-      (signals-error (query-prolog rulebase '((cl-prolog::halt seven)))))))
+      (is-equal 2 (halt-code '((cl-prolog-kit::catch (cl-prolog-kit::halt 2)
+                                                 ?any cl-prolog-kit:true))))
+      (signals-error (query-prolog rulebase '((cl-prolog-kit::halt ?code))))
+      (signals-error (query-prolog rulebase '((cl-prolog-kit::halt seven)))))))
 
 (deftest dynamic-list-head-resolves-before-dispatch ()
   (let ((rulebase (prolog ((ready ok)))))

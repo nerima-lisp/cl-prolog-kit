@@ -26,20 +26,20 @@ nix develop        # sbcl, cl-weave, paredit-cli, treefmt, mkdocs-material
 ```sh
 sbcl --non-interactive \
   --eval '(require :asdf)' \
-  --eval '(asdf:load-asd (truename "cl-prolog.asd"))' \
-  --eval '(asdf:load-system :cl-prolog/examples)'
+  --eval '(asdf:load-asd (truename "cl-prolog-kit.asd"))' \
+  --eval '(asdf:load-system :cl-prolog-kit/examples)'
 ```
 
-Run this from the repository root. Loading `cl-prolog/examples` loads the
+Run this from the repository root. Loading `cl-prolog-kit/examples` loads the
 library first and then executes all three example files. The example files are
 not standalone scripts, so invoking them directly with `sbcl --script` does not
-load the `cl-prolog` package. See [Examples](../guide/examples.md) for a
+load the `cl-prolog-kit` package. See [Examples](../guide/examples.md) for a
 walkthrough.
 
 ## Testing
 
-cl-prolog's regression suites are the `cl-prolog/test` and
-`cl-prolog/callgraph/test` ASDF systems. They depend on
+cl-prolog-kit's regression suites are the `cl-prolog-kit/test` and
+`cl-prolog-kit/callgraph/test` ASDF systems. They depend on
 [cl-weave](https://github.com/nerima-lisp/cl-weave) and cover isolated table
 cases, per-query cases, fixtures, generated relational properties, and the
 callgraph analysis API.
@@ -57,7 +57,7 @@ nix fmt                       # format Nix sources (treefmt)
 Pass any cl-weave CLI options after `--`; for example, to produce a JSON result:
 
 ```sh
-nix run . -- --reporter json --output cl-prolog-weave-results.json
+nix run . -- --reporter json --output cl-prolog-kit-weave-results.json
 ```
 
 !!! info "Unsupported platforms"
@@ -80,7 +80,7 @@ nix run . -- --reporter json --output cl-prolog-weave-results.json
 - **`checks.formatting`** — checks every Nix file against `nixfmt`, via
   treefmt. `nix fmt` fixes what it reports.
 - **`checks.package`** — builds `packages.default`, so the package README.md
-  advertises (`nix run github:nerima-lisp/cl-prolog`) is actually realised,
+  advertises (`nix run github:nerima-lisp/cl-prolog-kit`) is actually realised,
   not merely evaluated.
 - **`checks.app-test`** — runs `apps.test`, the cl-weave CLI wrapper (a
   distinct code path from `checks.default`: it sets a 4096 MB dynamic space).
@@ -90,7 +90,7 @@ nix run . -- --reporter json --output cl-prolog-weave-results.json
 ## Coverage
 
 `packages.coverage` runs both regression suites under `sb-cover`, instrumenting
-`cl-prolog`, `cl-prolog/weave`, and `cl-prolog/callgraph` (not the `cl-weave`
+`cl-prolog-kit`, `cl-prolog-kit/weave`, and `cl-prolog-kit/callgraph` (not the `cl-weave`
 harness driving them), and writes an HTML report. The report helper generates
 its runner from `flake.nix`, so it does not read the source-tree
 `run-coverage.lisp`:
@@ -112,10 +112,10 @@ if the report fails to build, not if coverage drops.
 
 ## Query test helpers
 
-Load the `cl-prolog/weave` ASDF system to use the public query test helpers:
+Load the `cl-prolog-kit/weave` ASDF system to use the public query test helpers:
 
 ```lisp
-(asdf:load-system :cl-prolog/weave)
+(asdf:load-system :cl-prolog-kit/weave)
 ```
 
 `deftest-queries` creates an independent cl-weave case and a fresh rulebase for
@@ -123,7 +123,7 @@ every query. A leading case label is optional; without one, the printed query is
 used.
 
 ```lisp
-(cl-prolog/weave:deftest-queries family-queries ((make-family-rulebase))
+(cl-prolog-kit/weave:deftest-queries family-queries ((make-family-rulebase))
   ("keeps proof order" (parent alice ?child) :ordered
    (((?child . bob)) ((?child . carol))))
   ((parent alice ?child) :set
@@ -131,7 +131,7 @@ used.
   ((parent alice ?child) :first ((?child . bob)))
   ((parent alice bob) :succeeds)
   ((parent bob alice) :fails)
-  ((parent alice bob) :signals cl-prolog:invalid-max-depth-error
+  ((parent alice bob) :signals cl-prolog-kit:invalid-max-depth-error
    :max-depth :invalid))
 ```
 
@@ -151,7 +151,7 @@ Use `assert-query` inside an existing cl-weave case when a table is not needed:
 
 ```lisp
 (cl-weave:it "finds Alice's first child"
-  (cl-prolog/weave:assert-query (make-family-rulebase)
+  (cl-prolog-kit/weave:assert-query (make-family-rulebase)
     (parent alice ?child) :first ((?child . bob))))
 ```
 

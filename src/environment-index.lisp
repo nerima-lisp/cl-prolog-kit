@@ -2,7 +2,7 @@
 ;;;; environment, with a bounded overlay so extending an environment stays
 ;;;; cheap, plus the variable dereferencing (walk) built on top of it.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defconstant +environment-index-overlay-threshold+ 8)
 (progn

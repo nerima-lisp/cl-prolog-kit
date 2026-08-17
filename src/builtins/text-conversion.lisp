@@ -2,7 +2,7 @@
 ;;;; builtins in atom-ops.lisp and atom-number-conversion.lisp: resource
 ;;;; limits, character/code list conversion, and number-text parsing.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (progn
   (defparameter *max-prolog-derived-atom-candidates*

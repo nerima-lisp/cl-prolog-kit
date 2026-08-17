@@ -1,4 +1,4 @@
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defstruct (fd-store (:constructor %make-fd-store (domains constraints)))
   (domains nil :type list :read-only t)

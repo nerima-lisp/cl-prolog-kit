@@ -5,7 +5,7 @@
 ;;;; predicate hook, facts, and rules.  The state threaded through the
 ;;;; continuation is defined in proof-state.lisp.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (declaim (ftype function %proper-list-p %prove-goal/k %prove-clauses/k %prove-rule/k))
 

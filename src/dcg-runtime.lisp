@@ -6,7 +6,7 @@
 ;;;; EMIT; combinator sub-proofs run inside their own cut barrier so a cut
 ;;;; in a grammar rule stays local to that rule.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defparameter *dcg-sync-tokens* '(:t-rparen :t-semi :t-eof)
   "Token kinds DCG-ERROR-RECOVERY skips ahead to.")

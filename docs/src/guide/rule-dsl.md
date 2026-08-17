@@ -1,6 +1,6 @@
 # Rule DSL
 
-cl-prolog is **macro-first**: macros own the surface syntax and produce plain
+cl-prolog-kit is **macro-first**: macros own the surface syntax and produce plain
 clause data that the engine walks. This page covers the authoring forms for
 building and extending rulebases. For the goals that go *inside* clauses, see
 [Builtin Goals](builtin-goals.md); for extension via Lisp, see

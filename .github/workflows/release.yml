@@ -64,7 +64,7 @@ jobs:
       # runners, unlike relying on GNU- or BSD-specific sed behavior locally.
       - name: Verify tag matches .asd version
         env:
-          PACKAGE: cl-prolog
+          PACKAGE: cl-prolog-kit
         run: |
           set -euo pipefail
           asd_version="$(perl -ne '

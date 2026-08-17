@@ -1,13 +1,13 @@
 # Compatibility
 
-What `cl-prolog` promises to keep working, and what it deliberately does not.
+What `cl-prolog-kit` promises to keep working, and what it deliberately does not.
 
 ## Supported surface
 
-Changes preserve the documented `cl-prolog` public API, the CPS query surface,
+Changes preserve the documented `cl-prolog-kit` public API, the CPS query surface,
 and the separation between rule data and solver logic. Specifically:
 
-- documented public `cl-prolog` behavior, as described in
+- documented public `cl-prolog-kit` behavior, as described in
   [API Reference](api.md)
 - macro-first rule definition and CPS query semantics, as described in
   [Rule DSL](../guide/rule-dsl.md) and [Querying](../guide/querying.md)
@@ -34,8 +34,8 @@ verified.
 
 ## Versioning
 
-The `:version` in `cl-prolog.asd` is the single source of truth: `flake.nix`
+The `:version` in `cl-prolog-kit.asd` is the single source of truth: `flake.nix`
 reads it, and the release workflow refuses to publish a tag that disagrees
 with it. Breaking changes to the supported surface above are recorded in the
-[release notes](https://github.com/nerima-lisp/cl-prolog/releases) for the
+[release notes](https://github.com/nerima-lisp/cl-prolog-kit/releases) for the
 version they shipped in.

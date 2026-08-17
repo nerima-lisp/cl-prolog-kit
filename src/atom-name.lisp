@@ -7,14 +7,14 @@
 ;;;; `parent(X, Y).', read by this engine's parser -- denote the same
 ;;;; predicate.  That fixes the canonical spelling of an atom whose text holds
 ;;;; no upper-case letter: it is the UPCASED symbol name, so `foo' is
-;;;; CL-PROLOG::FOO and `%ATOM-TEXT' recovers "foo" by downcasing.
+;;;; CL-PROLOG-KIT::FOO and `%ATOM-TEXT' recovers "foo" by downcasing.
 ;;;;
 ;;;; An atom whose text does not survive that round trip -- anything holding an
 ;;;; upper-case letter, such as `fooBar', `FooBar', or `Hello world' -- can
 ;;;; neither be stored upcased (its spelling would be lost) nor be stored
-;;;; verbatim in CL-PROLOG (the name "ABC" of `'ABC'' would collide with the
+;;;; verbatim in CL-PROLOG-KIT (the name "ABC" of `'ABC'' would collide with the
 ;;;; canonical spelling of `abc').  Such atoms are interned verbatim in their
-;;;; own package, CL-PROLOG.VERBATIM-ATOMS.
+;;;; own package, CL-PROLOG-KIT.VERBATIM-ATOMS.
 ;;;;
 ;;;; The home package therefore records which of the two encodings is in
 ;;;; force, which makes %INTERN-PROLOG-ATOM and %ATOM-TEXT exact inverses.
@@ -25,18 +25,18 @@
 ;;;; unification (%SAME-ATOM-TEXT-P) and the standard order of terms
 ;;;; (%COMPARE-ATOM-TEXTS) both decide on text and never on symbol identity --
 ;;;; a distinction that matters because a name inherited from COMMON-LISP is
-;;;; interned in CL-PROLOG.USER-ATOMS by the parser but in COMMON-LISP by the
+;;;; interned in CL-PROLOG-KIT.USER-ATOMS by the parser but in COMMON-LISP by the
 ;;;; Lisp reader.  Both comparisons read characters in place, so neither
 ;;;; allocates the downcased text they compare.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 ;;; Cached for the classification predicates below, which run on every term
-;;; node the engine walks.  Interning resolves CL-PROLOG by name instead -- see
+;;; node the engine walks.  Interning resolves CL-PROLOG-KIT by name instead -- see
 ;;; %INTERN-PROLOG-ATOM.
-(defvar *user-atom-package* (find-package '#:cl-prolog.user-atoms))
+(defvar *user-atom-package* (find-package '#:cl-prolog-kit.user-atoms))
 
-(defvar *verbatim-atom-package* (find-package '#:cl-prolog.verbatim-atoms))
+(defvar *verbatim-atom-package* (find-package '#:cl-prolog-kit.verbatim-atoms))
 
 (defparameter +empty-list-atom-text+ "[]"
   "The text of the atom Common Lisp NIL stands for.  ISO 13211-1 6.3.5 makes
@@ -68,18 +68,18 @@ can account a newly interned name against its symbol budget."
     ((string= text +empty-list-atom-text+) nil)
     ((%atom-text-upcase-canonical-p text)
      ;; Resolved by name, not through the cached package object, so interning
-     ;; into a CL-PROLOG that has been renamed out from under the engine fails
+     ;; into a CL-PROLOG-KIT that has been renamed out from under the engine fails
      ;; loudly instead of populating a package nothing can find again.
      (let ((name (string-upcase text))
-           (package (find-package '#:cl-prolog)))
+           (package (find-package '#:cl-prolog-kit)))
        (multiple-value-bind (symbol status) (find-symbol name package)
          ;; A name inherited from COMMON-LISP must not be interned into
-         ;; CL-PROLOG (that would shadow the Lisp binding), and a `?'-prefixed
+         ;; CL-PROLOG-KIT (that would shadow the Lisp binding), and a `?'-prefixed
          ;; name must not become a logic variable; both go to USER-ATOMS.
          (if (or (eq status :inherited) (%reserved-atom-name-p name))
-             (funcall interner name (find-package '#:cl-prolog.user-atoms))
+             (funcall interner name (find-package '#:cl-prolog-kit.user-atoms))
              (or symbol (funcall interner name package))))))
-    (t (funcall interner text (find-package '#:cl-prolog.verbatim-atoms)))))
+    (t (funcall interner text (find-package '#:cl-prolog-kit.verbatim-atoms)))))
 
 (defun %atom-text-encoding (atom)
   "Return the string ATOM's text is encoded in, and true when it is verbatim.
@@ -140,7 +140,7 @@ RIGHT's in the character-code order the standard order of terms uses."
 
 Use this rather than a literal symbol whenever TEXT is not already lower case:
 `(prolog-atom \"FooBar\")' is the atom Prolog source spells `'FooBar'', which
-is a different atom from CL-PROLOG::|FooBar|."
+is a different atom from CL-PROLOG-KIT::|FooBar|."
   (%intern-prolog-atom text))
 
 (defun prolog-atom-text (atom)

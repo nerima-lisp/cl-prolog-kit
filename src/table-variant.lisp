@@ -1,7 +1,7 @@
 ;;;; Tabling data: the %table-entry/%table-session structs recording
 ;;;; memoized answers, and variant canonicalization (%canonicalize-variant,
 ;;;; %variant-graph-key, %instantiate-variant) used to key and replay them.
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defstruct (%table-entry (:copier nil) (:constructor %make-table-entry ())) "Variant-call answers accumulated during one tabled proof."
   (answers (quote ()) :type list)

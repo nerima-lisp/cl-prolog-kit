@@ -1,7 +1,7 @@
 # Call Graph Analysis
 
-`cl-prolog/callgraph` is a generic, program-representation-independent call-graph
-analysis library built on top of the core `cl-prolog` engine: reachability,
+`cl-prolog-kit/callgraph` is a generic, program-representation-independent call-graph
+analysis library built on top of the core `cl-prolog-kit` engine: reachability,
 dead-code and mutual-recursion detection, and FD-constraint graph coloring. It
 was split out of [nerima-lisp/cl-cc](https://github.com/nerima-lisp/cl-cc)'s
 `packages/prolog-tools`, which paired this same logic with a thin adapter that
@@ -13,14 +13,14 @@ other caller/callee relationship you can enumerate as edges.
 ## Loading
 
 ```lisp
-(asdf:load-system :cl-prolog/callgraph)
+(asdf:load-system :cl-prolog-kit/callgraph)
 ```
 
-This loads `cl-prolog` first. The test suite is a separate secondary system,
+This loads `cl-prolog-kit` first. The test suite is a separate secondary system,
 scoped to keep the `cl-weave` test dependency out of the production system:
 
 ```lisp
-(asdf:test-system "cl-prolog/callgraph/test")
+(asdf:test-system "cl-prolog-kit/callgraph/test")
 ```
 
 ## Building a call graph
@@ -29,7 +29,7 @@ scoped to keep the `cl-weave` test dependency out of the production system:
 private rulebase:
 
 ```lisp
-(in-package #:cl-prolog/callgraph)
+(in-package #:cl-prolog-kit/callgraph)
 
 (defvar *cg*
   (build-call-graph-from-edges
@@ -82,7 +82,7 @@ pairs of distinct functions each reachable from the other.
 
 `color-call-graph` treats a direct call between two functions as an
 interference and assigns each defined function a color in `1..num-colors`
-such that no two functions joined by a call share one — using cl-prolog's
+such that no two functions joined by a call share one — using cl-prolog-kit's
 finite-domain constraint solver (`ins` domain restriction, pairwise `#\=`
 disequality, `labeling` search) rather than a hand-rolled greedy algorithm:
 
@@ -101,7 +101,7 @@ every pair of functions joined by a direct call edge.
 
 `edge-dcg.lisp` defines a small textual notation for describing call edges
 outside of Lisp source — useful for fixtures and hand-authored graphs — using
-a `cl-prolog` DCG grammar as the recognizer:
+a `cl-prolog-kit` DCG grammar as the recognizer:
 
 ```lisp
 (parse-edge-spec "main -> helper, helper -> leaf")
@@ -122,5 +122,5 @@ you need tokenizing or well-formedness checking without full extraction.
 - `tokenize-edge-spec`, `edge-spec-well-formed-p`, `parse-edge-spec`
 - `color-call-graph`, `valid-coloring-p`
 
-See [API Reference](api.md) for the core `cl-prolog` package these are built
+See [API Reference](api.md) for the core `cl-prolog-kit` package these are built
 on.

@@ -1,19 +1,19 @@
-(defpackage #:cl-prolog.user-atoms
+(defpackage #:cl-prolog-kit.user-atoms
   (:use)
   (:documentation
-   "Interned Prolog atoms kept separate from CL-PROLOG symbols, including
+   "Interned Prolog atoms kept separate from CL-PROLOG-KIT symbols, including
 inherited Common Lisp names and quoted names reserved for logic-variable
 syntax."))
 
-(defpackage #:cl-prolog.verbatim-atoms
+(defpackage #:cl-prolog-kit.verbatim-atoms
   (:use)
   (:documentation
    "Prolog atoms whose text holds an upper-case letter, interned under that
-exact text rather than the upcased spelling CL-PROLOG uses for a lower-case
+exact text rather than the upcased spelling CL-PROLOG-KIT uses for a lower-case
 name.  The home package is what tells the two encodings apart, so `'ABC'' here
-and CL-PROLOG::ABC (the atom `abc') stay distinct.  See src/atom-name.lisp."))
+and CL-PROLOG-KIT::ABC (the atom `abc') stay distinct.  See src/atom-name.lisp."))
 
-(defpackage #:cl-prolog
+(defpackage #:cl-prolog-kit
   (:use #:cl)
   (:shadow #:! #:assert #:catch #:throw)
   (:documentation

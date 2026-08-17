@@ -3,7 +3,7 @@
 ;;;; %term-resolve/%term-atom-p/%term-compound-p/%term-acyclic-p primitives
 ;;;; they share.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %term-resolve (term environment)
   "Resolve TERM's variables through ENVIRONMENT, preserving structure sharing.

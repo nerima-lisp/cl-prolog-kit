@@ -4,7 +4,7 @@
 ;;;; solution-collection primitives this reduces over and loads immediately
 ;;;; before.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 ;;; aggregate_all/3 -- count/sum/max/min/bag/set reductions over a goal.
 

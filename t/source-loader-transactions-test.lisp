@@ -2,7 +2,7 @@
 ;;;; reload/if-loaded policy, symbolic-link identity, circular ensure_loaded,
 ;;;; ISO declaration directives, and table-declaration ownership.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (deftest consult-publishes-clauses-before-the-next-conjunct ()
   (with-temporary-prolog-files
@@ -39,9 +39,9 @@
     (let ((rulebase (make-rulebase)))
       (consult-prolog source rulebase)
       (consult-prolog source rulebase)
-      (is (null (cl-prolog::%operator-table-find
-                 (cl-prolog::rulebase-operator-table rulebase)
-                 'cl-prolog::totally_nonexistent_test_op :xfx))))))
+      (is (null (cl-prolog-kit::%operator-table-find
+                 (cl-prolog-kit::rulebase-operator-table rulebase)
+                 'cl-prolog-kit::totally_nonexistent_test_op :xfx))))))
 
 (deftest source-loader-reload-deduplicates-repeated-operator-effects ()
   ;; The operator name is quoted so re-parsing the directive on reload does
@@ -52,9 +52,9 @@
       (consult-prolog source rulebase)
       (consult-prolog source rulebase)
       (is (= 800
-             (cl-prolog::operator-definition-priority
-              (first (cl-prolog::%operator-table-find
-                      (cl-prolog::rulebase-operator-table rulebase)
+             (cl-prolog-kit::operator-definition-priority
+              (first (cl-prolog-kit::%operator-table-find
+                      (cl-prolog-kit::rulebase-operator-table rulebase)
                       (prolog-atom "dup_test_op")
                       :xfx))))))))
 
@@ -79,7 +79,7 @@
       ((initializing ":- initialization(write(should_not_run)).")
        (invalid ":- unsupported_directive(value)."))
     (let* ((output (make-string-output-stream))
-           (context (cl-prolog::make-prolog-io-context :output output))
+           (context (cl-prolog-kit::make-prolog-io-context :output output))
            (rulebase (make-rulebase :io-context context)))
       (signals-error (consult-prolog (list initializing invalid) rulebase))
       (is-equal "" (get-output-stream-string output)))))
@@ -115,7 +115,7 @@
       (ensure-prolog-loaded source rulebase)
       (ensure-prolog-loaded (pathname relative) rulebase)
       (is-equal 1
-                (count 'cl-prolog::loaded_once
+                (count 'cl-prolog-kit::loaded_once
                        (rulebase-visible-clauses rulebase)
                        :key (lambda (clause) (first (clause-head clause))))))))
 
@@ -125,11 +125,11 @@
     (let ((rulebase (consult-prolog source)))
       (rewrite-prolog-file! source "new_clause.")
       (consult-prolog source rulebase)
-      (is (not (%source-predicate-defined-p rulebase 'cl-prolog::old_clause)))
+      (is (not (%source-predicate-defined-p rulebase 'cl-prolog-kit::old_clause)))
       (is (%source-query-succeeds-p rulebase "new_clause"))
-      (is (null (cl-prolog::%operator-table-find
-                 (cl-prolog::rulebase-operator-table rulebase)
-                 'cl-prolog::source_operator))))))
+      (is (null (cl-prolog-kit::%operator-table-find
+                 (cl-prolog-kit::rulebase-operator-table rulebase)
+                 'cl-prolog-kit::source_operator))))))
 
 (deftest consult-reload-preserves-runtime-clauses-and-operator-overrides ()
   (with-temporary-prolog-files
@@ -145,10 +145,10 @@
       (consult-prolog source rulebase)
       (is (%source-query-succeeds-p rulebase "runtime_clause"))
       (is-equal 600
-                (cl-prolog::operator-definition-priority
-                 (first (cl-prolog::%operator-table-find
-                         (cl-prolog::rulebase-operator-table rulebase)
-                         'cl-prolog::layered_operator :xfx)))))))
+                (cl-prolog-kit::operator-definition-priority
+                 (first (cl-prolog-kit::%operator-table-find
+                         (cl-prolog-kit::rulebase-operator-table rulebase)
+                         'cl-prolog-kit::layered_operator :xfx)))))))
 
 (deftest consult-reload-failure-restores-owned-artifacts ()
   (with-temporary-prolog-files
@@ -157,9 +157,9 @@
       (rewrite-prolog-file! source "transient_source_clause. ?- invalid.")
       (signals-error (consult-prolog source rulebase))
       (is (%source-query-succeeds-p rulebase "preserved_source_clause"))
-      (is (cl-prolog::%operator-table-find
-           (cl-prolog::rulebase-operator-table rulebase)
-           'cl-prolog::rollback_operator :xfx)))))
+      (is (cl-prolog-kit::%operator-table-find
+           (cl-prolog-kit::rulebase-operator-table rulebase)
+           'cl-prolog-kit::rollback_operator :xfx)))))
 
 (deftest canonical-source-identity-collapses-symbolic-links ()
   (with-temporary-prolog-files ((source "linked_clause."))
@@ -173,7 +173,7 @@
                (ensure-prolog-loaded link rulebase)
                (is-equal 1
                          (hash-table-count
-                          (cl-prolog::rulebase-source-registry rulebase)))
+                          (cl-prolog-kit::rulebase-source-registry rulebase)))
                (is-equal 1 (length (rulebase-visible-clauses rulebase)))))
         (when (probe-file link) (delete-file link))))))
 
@@ -193,7 +193,7 @@
        "first_loaded"
        "second_loaded")
       (is-equal 2 (hash-table-count
-                   (cl-prolog::rulebase-source-registry rulebase))))))
+                   (cl-prolog-kit::rulebase-source-registry rulebase))))))
 
 (deftest load-files-if-not-loaded-is-idempotent-and-atomic ()
   (with-temporary-prolog-files
@@ -218,7 +218,7 @@
       (is (null (rulebase-visible-clauses rulebase)))
       (is-equal 0
                 (hash-table-count
-                 (cl-prolog::rulebase-source-registry rulebase))))))
+                 (cl-prolog-kit::rulebase-source-registry rulebase))))))
 
 (deftest-table load-files-options-are-strict ()
   (:is (%source-query-succeeds-p
@@ -297,11 +297,11 @@
   (let ((rulebase
           (consult-prolog
            ":- table(reachable/1). :- dynamic(reachable/1). reachable(origin).")))
-    (is (cl-prolog::%rulebase-tabled-p
-         rulebase 'cl-prolog::reachable 1))
+    (is (cl-prolog-kit::%rulebase-tabled-p
+         rulebase 'cl-prolog-kit::reachable 1))
     (is (eq :dynamic
-            (cl-prolog::%rulebase-predicate-property
-             rulebase 'cl-prolog::reachable 1)))
+            (cl-prolog-kit::%rulebase-predicate-property
+             rulebase 'cl-prolog-kit::reachable 1)))
     (is (%source-query-succeeds-p rulebase "reachable(origin)")))
   (signals-error (consult-prolog ":- table(reachable).")))
 
@@ -310,16 +310,16 @@
       ((first ":- table(shared_table/1). shared_table(first).")
        (second ":- table(shared_table/1). shared_table(second)."))
     (let ((rulebase (consult-prolog (list first second))))
-      (is (cl-prolog::%rulebase-tabled-p
-           rulebase 'cl-prolog::shared_table 1))
+      (is (cl-prolog-kit::%rulebase-tabled-p
+           rulebase 'cl-prolog-kit::shared_table 1))
       (rewrite-prolog-file! first "replacement(first).")
       (consult-prolog first rulebase)
-      (is (cl-prolog::%rulebase-tabled-p
-           rulebase 'cl-prolog::shared_table 1))
+      (is (cl-prolog-kit::%rulebase-tabled-p
+           rulebase 'cl-prolog-kit::shared_table 1))
       (rewrite-prolog-file! second "replacement(second).")
       (consult-prolog second rulebase)
-      (is (not (cl-prolog::%rulebase-tabled-p
-                rulebase 'cl-prolog::shared_table 1))))))
+      (is (not (cl-prolog-kit::%rulebase-tabled-p
+                rulebase 'cl-prolog-kit::shared_table 1))))))
 
 (deftest source-loader-rolls-back-table-declarations ()
   (let ((rulebase (make-rulebase)))
@@ -327,5 +327,5 @@
      (consult-prolog
       ":- table(transient_table/1). :- initialization(fail)."
       rulebase))
-    (is (not (cl-prolog::%rulebase-tabled-p
-              rulebase 'cl-prolog::transient_table 1)))))
+    (is (not (cl-prolog-kit::%rulebase-tabled-p
+              rulebase 'cl-prolog-kit::transient_table 1)))))

@@ -1,4 +1,4 @@
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %fd-emit (store environment emit)
   (let ((*fd-store* store))

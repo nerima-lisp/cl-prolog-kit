@@ -1,14 +1,14 @@
 ;;;; format/1,2,3, tab/1, and print/1 output tests.  Uses the with-io-rulebase
 ;;;; fixture (defined in builtin-io-terms-test.lisp) to capture current-output.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (defmacro assert-format-output (format-string arguments expected)
   "Run format/2 with FORMAT-STRING and ARGUMENTS and assert its captured
 current-output equals EXPECTED."
   `(with-io-rulebase (rulebase input output) ""
      (assert-query rulebase
-                   (cl-prolog::format ,format-string ,arguments)
+                   (cl-prolog-kit::format ,format-string ,arguments)
                    :succeeds)
      (is (string= (get-output-stream-string output) ,expected))))
 
@@ -52,16 +52,16 @@ current-output equals EXPECTED."
 
 (deftest format-reports-too-few-arguments ()
   (with-io-rulebase (rulebase input output) ""
-    (assert-query rulebase (cl-prolog::format "~w ~w" (only)) :signals)))
+    (assert-query rulebase (cl-prolog-kit::format "~w ~w" (only)) :signals)))
 
 (deftest tab-writes-spaces ()
   (with-io-rulebase (rulebase input output) ""
-    (assert-query rulebase (cl-prolog::tab 4) :succeeds)
+    (assert-query rulebase (cl-prolog-kit::tab 4) :succeeds)
     (is (string= (get-output-stream-string output) "    "))))
 
 (deftest print-writes-quoted-term ()
   (with-io-rulebase (rulebase input output) ""
-    (assert-query rulebase (cl-prolog::print (foo bar)) :succeeds)
+    (assert-query rulebase (cl-prolog-kit::print (foo bar)) :succeeds)
     (is (string= (get-output-stream-string output) "foo(bar)"))))
 
 (deftest format-additional-directives ()
@@ -75,10 +75,10 @@ current-output equals EXPECTED."
   (assert-format-output "~s" ((104 105)) "hi")
   ;; ~p quotes like print/1, unlike ~w.
   (with-io-rulebase (rulebase input output) ""
-    (assert-query rulebase (cl-prolog::format "~p" (|a b|)) :succeeds)
+    (assert-query rulebase (cl-prolog-kit::format "~p" (|a b|)) :succeeds)
     (is (string= (get-output-stream-string output) "'a b'")))
   (with-io-rulebase (rulebase input output) ""
-    (assert-query rulebase (cl-prolog::format "~w" (|a b|)) :succeeds)
+    (assert-query rulebase (cl-prolog-kit::format "~w" (|a b|)) :succeeds)
     (is (string= (get-output-stream-string output) "a b"))))
 
 (deftest format-star-and-fill-directives ()
@@ -95,20 +95,20 @@ current-output equals EXPECTED."
 (deftest format-error-contracts-are-catchable ()
   (with-io-rulebase (rulebase input output) ""
     ;; malformed / unknown directives raise catchable ISO errors
-    (assert-query rulebase (cl-prolog::format "~" ()) :signals)
-    (assert-query rulebase (cl-prolog::format "~5" ()) :signals)
-    (assert-query rulebase (cl-prolog::format "~z" (1)) :signals)
-    (assert-query rulebase (cl-prolog::format "~40r" (5)) :signals)
+    (assert-query rulebase (cl-prolog-kit::format "~" ()) :signals)
+    (assert-query rulebase (cl-prolog-kit::format "~5" ()) :signals)
+    (assert-query rulebase (cl-prolog-kit::format "~z" (1)) :signals)
+    (assert-query rulebase (cl-prolog-kit::format "~40r" (5)) :signals)
     ;; argument type errors
-    (assert-query rulebase (cl-prolog::format "~d" (foo)) :signals)
-    (assert-query rulebase (cl-prolog::format "~a" ((foo bar))) :signals)
-    (assert-query rulebase (cl-prolog::format "~2f" (foo)) :signals)
-    (assert-query rulebase (cl-prolog::format "~c" (bar)) :signals)
-    (assert-query rulebase (cl-prolog::format "~c" (-1)) :signals)
-    (assert-query rulebase (cl-prolog::format "~s" (42)) :signals)
+    (assert-query rulebase (cl-prolog-kit::format "~d" (foo)) :signals)
+    (assert-query rulebase (cl-prolog-kit::format "~a" ((foo bar))) :signals)
+    (assert-query rulebase (cl-prolog-kit::format "~2f" (foo)) :signals)
+    (assert-query rulebase (cl-prolog-kit::format "~c" (bar)) :signals)
+    (assert-query rulebase (cl-prolog-kit::format "~c" (-1)) :signals)
+    (assert-query rulebase (cl-prolog-kit::format "~s" (42)) :signals)
     ;; unbound / wrong-typed format string
-    (assert-query rulebase (cl-prolog::format ?f ()) :signals)
-    (assert-query rulebase (cl-prolog::format 42 ()) :signals)))
+    (assert-query rulebase (cl-prolog-kit::format ?f ()) :signals)
+    (assert-query rulebase (cl-prolog-kit::format 42 ()) :signals)))
 
 (defun format-goal-error-summary (goal)
   "Summarize the ISO error GOAL raises, with the output stream discarded."
@@ -119,17 +119,17 @@ current-output equals EXPECTED."
   ;; The column argument of ~* and the value of ~D/~r must each be an integer,
   ;; and the error has to name the offending term rather than just failing.
   (:equal '(prolog-type-error ("TYPE_ERROR" "INTEGER" "FOO"))
-          (format-goal-error-summary '(cl-prolog::format "~*|" (foo))))
+          (format-goal-error-summary '(cl-prolog-kit::format "~*|" (foo))))
   (:equal '(prolog-type-error ("TYPE_ERROR" "INTEGER" "FOO"))
-          (format-goal-error-summary '(cl-prolog::format "~D" (foo))))
+          (format-goal-error-summary '(cl-prolog-kit::format "~D" (foo))))
   (:equal '(prolog-type-error ("TYPE_ERROR" "INTEGER" "FOO"))
-          (format-goal-error-summary '(cl-prolog::format "~r" (foo))))
+          (format-goal-error-summary '(cl-prolog-kit::format "~r" (foo))))
   (:equal '(prolog-type-error ("TYPE_ERROR" "INTEGER" 1.5))
-          (format-goal-error-summary '(cl-prolog::tab 1.5)))
+          (format-goal-error-summary '(cl-prolog-kit::tab 1.5)))
   ;; A fill directive cut short by the end of the format string is a malformed
   ;; format string, not a truncated-directive-in-general error.
   (:equal '(prolog-domain-error ("DOMAIN_ERROR" "FORMAT_STRING" "~`"))
-          (format-goal-error-summary '(cl-prolog::format "~`" ()))))
+          (format-goal-error-summary '(cl-prolog-kit::format "~`" ()))))
 
 (deftest format-renders-negative-grouped-integers ()
   (assert-format-output "~D" (-1234567) "-1,234,567")
@@ -139,28 +139,28 @@ current-output equals EXPECTED."
   "format/2's second argument is a list of arguments, but SWI also accepts a
 bare term as the single argument -- so `format(\"~w\", hello)' prints hello
 rather than raising."
-  (assert-format-output "~w" cl-prolog::hello "hello")
+  (assert-format-output "~w" cl-prolog-kit::hello "hello")
   (assert-format-output "~w" 42 "42"))
 
 (deftest format-resource-limits-are-catchable ()
   (with-io-rulebase (rulebase input output) ""
-    (assert-query rulebase (cl-prolog::format "~999999999c" (65)) :signals)
-    (assert-query rulebase (cl-prolog::format "~999999999n" ()) :signals)
-    (assert-query rulebase (cl-prolog::format "~t~2000000000|" ()) :signals)
-    (assert-query rulebase (cl-prolog::tab 999999999) :signals)))
+    (assert-query rulebase (cl-prolog-kit::format "~999999999c" (65)) :signals)
+    (assert-query rulebase (cl-prolog-kit::format "~999999999n" ()) :signals)
+    (assert-query rulebase (cl-prolog-kit::format "~t~2000000000|" ()) :signals)
+    (assert-query rulebase (cl-prolog-kit::tab 999999999) :signals)))
 
 (deftest format-tab-print-stream-arities ()
   (with-io-rulebase (rulebase input output) ""
-    (assert-query rulebase (cl-prolog::format "hello") :succeeds)
+    (assert-query rulebase (cl-prolog-kit::format "hello") :succeeds)
     (is (string= (get-output-stream-string output) "hello")))
   (with-io-rulebase (rulebase input output) ""
-    (assert-query rulebase (cl-prolog::format cl-prolog::user_output "x=~w" (1))
+    (assert-query rulebase (cl-prolog-kit::format cl-prolog-kit::user_output "x=~w" (1))
                   :succeeds)
     (is (string= (get-output-stream-string output) "x=1")))
   (with-io-rulebase (rulebase input output) ""
-    (assert-query rulebase (cl-prolog::tab cl-prolog::user_output 3) :succeeds)
+    (assert-query rulebase (cl-prolog-kit::tab cl-prolog-kit::user_output 3) :succeeds)
     (is (string= (get-output-stream-string output) "   ")))
   (with-io-rulebase (rulebase input output) ""
-    (assert-query rulebase (cl-prolog::print cl-prolog::user_output (foo bar))
+    (assert-query rulebase (cl-prolog-kit::print cl-prolog-kit::user_output (foo bar))
                   :succeeds)
     (is (string= (get-output-stream-string output) "foo(bar)"))))

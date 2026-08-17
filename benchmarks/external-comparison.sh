@@ -32,7 +32,7 @@ run_engine() {
         use warnings;
 
         my ($engine, $version, $trial, $iterations, @command) = @ARGV;
-        my ($error, $error_path) = tempfile("cl-prolog-benchmark-stderr-XXXXXX",
+        my ($error, $error_path) = tempfile("cl-prolog-kit-benchmark-stderr-XXXXXX",
             TMPDIR => 1, UNLINK => 1);
         my $pid;
         my $waited = 0;
@@ -120,7 +120,7 @@ run_engine() {
 swi_version="$(nix shell nixpkgs#swi-prolog -c swipl --version)"
 trealla_version="$(nix shell nixpkgs#trealla -c tpl --version)"
 scryer_version="$(nix shell nixpkgs#scryer-prolog -c scryer-prolog --version)"
-cl_prolog_version="$(sbcl --version)"
+cl_prolog_kit_version="$(sbcl --version)"
 
 run_named_engine() {
     engine="$1"
@@ -144,10 +144,10 @@ run_named_engine() {
                 scryer-prolog -f benchmarks/external-workload.pl \
                 -g benchmark_server
             ;;
-        cl-prolog)
-            run_engine cl-prolog "$cl_prolog_version" "$trial" \
+        cl-prolog-kit)
+            run_engine cl-prolog-kit "$cl_prolog_kit_version" "$trial" \
                 sbcl --noinform --disable-debugger \
-                --script benchmarks/external-cl-prolog.lisp
+                --script benchmarks/external-cl-prolog-kit.lisp
             ;;
         *)
             printf 'Unknown engine: %s\n' "$engine" >&2
@@ -168,15 +168,15 @@ fi
 printf 'metadata\tos=%s\tarch=%s\tgit_revision=%s\tgit_dirty=%s\titerations=%s\ttrials=%s\torder=cyclic-rotation\tmedian=middle-value-or-mean-of-two-middle-values\n' \
     "$os" "$arch" "$git_revision" "$git_dirty" "$iterations" "$trials"
 perl -e '
-        my @engines = qw(swi trealla scryer cl-prolog);
+        my @engines = qw(swi trealla scryer cl-prolog-kit);
         for my $version (@ARGV) {
             $version =~ s/[\t\r\n]+/ /g;
             my $engine = shift @engines;
             printf "metadata\tengine=%s\tversion=%s\n", $engine, $version;
         }
-    ' "$swi_version" "$trealla_version" "$scryer_version" "$cl_prolog_version"
+    ' "$swi_version" "$trealla_version" "$scryer_version" "$cl_prolog_kit_version"
 
-results_file="$(mktemp "${TMPDIR:-/tmp}/cl-prolog-external-results.XXXXXX")"
+results_file="$(mktemp "${TMPDIR:-/tmp}/cl-prolog-kit-external-results.XXXXXX")"
 trap 'rm -f "$results_file"' 0 1 2 15
 
 trial=1
@@ -190,7 +190,7 @@ while [ "$trial" -le "$trials" ]; do
             0) engine=swi ;;
             1) engine=trealla ;;
             2) engine=scryer ;;
-            3) engine=cl-prolog ;;
+            3) engine=cl-prolog-kit ;;
         esac
         if [ -z "$order" ]; then
             order="$engine"
@@ -217,7 +217,7 @@ perl -e '
     use warnings;
 
     my ($path, $iterations, $trials) = @ARGV;
-    my @engines = qw(swi trealla scryer cl-prolog);
+    my @engines = qw(swi trealla scryer cl-prolog-kit);
     my (%elapsed, %seen);
 
     open my $input, "<", $path or die "cannot read $path: $!\n";

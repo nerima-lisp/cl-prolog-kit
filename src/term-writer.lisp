@@ -1,6 +1,6 @@
 ;;;; Canonical, operator-aware Prolog term rendering.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defconstant +compound-argument-priority+ 999)
 

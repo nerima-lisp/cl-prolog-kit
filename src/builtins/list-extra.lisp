@@ -4,7 +4,7 @@
 ;;;; through library(lists).  Meta-predicates that call a goal per element
 ;;;; (maplist, foldl, include, exclude, partition) live in apply.lisp.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defun %check-builtin-output-length (count resource environment operation message)
   "Bound COUNT against *max-prolog-builtin-output-length*, raising a catchable

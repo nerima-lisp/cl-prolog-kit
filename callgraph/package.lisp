@@ -1,7 +1,7 @@
-;;;; callgraph/package.lisp - CL-PROLOG/CALLGRAPH package
+;;;; callgraph/package.lisp - CL-PROLOG-KIT/CALLGRAPH package
 ;;;;
 ;;;; Generic, program-representation-independent call-graph analysis over
-;;;; cl-prolog: reachability, dead-code detection, mutual-recursion
+;;;; cl-prolog-kit: reachability, dead-code detection, mutual-recursion
 ;;;; detection, FD-constraint graph coloring, and a DCG-based grammar for a
 ;;;; small textual edge notation ("main -> helper").
 ;;;;
@@ -12,13 +12,13 @@
 ;;;; feeds BUILD-CALL-GRAPH-FROM-EDGES a plain list of names and
 ;;;; (caller . callee) conses.
 ;;;;
-;;;; Only :CL is used, not :CL-PROLOG: every cl-prolog engine symbol
+;;;; Only :CL is used, not :CL-PROLOG-KIT: every cl-prolog-kit engine symbol
 ;;;; (ASSERTZ, RETRACT, FINDALL, INS, LABELING, ...) is referenced through an
-;;;; explicit CL-PROLOG: prefix throughout this package's source, matching
+;;;; explicit CL-PROLOG-KIT: prefix throughout this package's source, matching
 ;;;; the convention the original cl-cc code already used and avoiding the
-;;;; ASSERT/CATCH/THROW shadowing conflict a `:use #:cl-prolog` would
+;;;; ASSERT/CATCH/THROW shadowing conflict a `:use #:cl-prolog-kit` would
 ;;;; otherwise create alongside `:use #:cl`.
-(defpackage #:cl-prolog/callgraph
+(defpackage #:cl-prolog-kit/callgraph
   (:use #:cl)
   (:export
     ;; call-graph.lisp

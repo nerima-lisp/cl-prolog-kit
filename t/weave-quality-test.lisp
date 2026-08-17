@@ -1,6 +1,6 @@
 ;;;; cl-weave-specific regression coverage for relational behavior.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (defvar *weave-family-rulebase* nil)
 
@@ -54,16 +54,16 @@ antisymmetric for integers"
     ((left (cl-weave:gen-integer :min -1000 :max 1000))
      (right (cl-weave:gen-integer :min -1000 :max 1000)))
   (cl-weave:expect-has-assertions)
-  (let ((forward (cl-prolog::%compare-terms left right))
-        (backward (cl-prolog::%compare-terms right left)))
+  (let ((forward (cl-prolog-kit::%compare-terms left right))
+        (backward (cl-prolog-kit::%compare-terms right left)))
     (cl-weave:expect forward :to-equal (signum (- left right)))
     (cl-weave:expect backward :to-equal (- forward))))
 
 (defparameter *iso-error-type-mutations*
   '(("TYPE_ERROR" . "DOMAIN_ERROR") ("DOMAIN_ERROR" . "TYPE_ERROR")
     ("INSTANTIATION_ERROR" . "TYPE_ERROR"))
-  "Confusable ISO error-type formal names cl-prolog's own conditions carry
-(cl-prolog::prolog-type-error, prolog-domain-error, prolog-instantiation-error).")
+  "Confusable ISO error-type formal names cl-prolog-kit's own conditions carry
+(cl-prolog-kit::prolog-type-error, prolog-domain-error, prolog-instantiation-error).")
 
 (cl-weave:defmutation-operator :iso-error-type-swap (form path)
   "Swaps an ISO error-type string literal (TYPE_ERROR, DOMAIN_ERROR,
@@ -79,7 +79,7 @@ checks the specific ISO type does not."
 (deftest iso-error-type-mutation-operator-catches-loose-error-assertions ()
   "Demonstrates cl-weave's extension API (DEFMUTATION-OPERATOR), not just its
 built-in operator set: a project-specific mutator for the ISO error-type
-vocabulary cl-prolog's condition types carry (src/engine.lisp), applied to
+vocabulary cl-prolog-kit's condition types carry (src/engine.lisp), applied to
 two representative assertion styles."
   (let ((loose-results
           (cl-weave:run-mutations
@@ -105,19 +105,19 @@ two representative assertion styles."
 (deftest weave-solution-multiset-diff-reports-multiset-differences ()
   "Verify the internal :set matcher primitive reports both sides of a mismatch and accepts unordered equal multisets."
   (multiple-value-bind (missing unexpected)
-      (cl-prolog/weave::%solution-multiset-diff '((a) (b)) '((a) (c)))
+      (cl-prolog-kit/weave::%solution-multiset-diff '((a) (b)) '((a) (c)))
     (is (equal missing '((c))))
     (is (equal unexpected '((b)))))
   (multiple-value-bind (missing unexpected)
-      (cl-prolog/weave::%solution-multiset-diff '((a) (b)) '((b) (a)))
+      (cl-prolog-kit/weave::%solution-multiset-diff '((a) (b)) '((b) (a)))
     (is (null missing))
     (is (null unexpected))))
 
 (deftest weave-parse-query-spec-requires-query-after-label ()
-  "cl-prolog/weave::%parse-query-spec signals when a labelled spec supplies only
+  "cl-prolog-kit/weave::%parse-query-spec signals when a labelled spec supplies only
 its string label and omits the query and assertion kind, exercising the
 consp-body guard's failure branch."
-  (signals-error (cl-prolog/weave::%parse-query-spec '("label only"))))
+  (signals-error (cl-prolog-kit/weave::%parse-query-spec '("label only"))))
 
 (deftest define-arithmetic-comparison-operator-mapping-kills-every-mutant ()
   "Mutation-test the define-arithmetic-comparison operator table (src/builtins/arithmetic.lisp):

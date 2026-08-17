@@ -10,7 +10,7 @@
 ;;;; it exists only to pin cl-cc's own package-qualified printing behavior
 ;;;; and stays in cl-cc as an integration test of the adapter.
 
-(in-package #:cl-prolog/callgraph/test)
+(in-package #:cl-prolog-kit/callgraph/test)
 
 (defun mk-graph (names edges &key entry-points)
   (build-call-graph-from-edges names edges :entry-points entry-points))

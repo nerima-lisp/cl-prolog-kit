@@ -3,7 +3,7 @@
 ;;;; Collection/database tests live in builtin-collections-test.lisp; arithmetic
 ;;;; and flag tests live in builtin-arithmetic-and-flags-test.lisp.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (defun solution-count (rulebase goal)
   "Return the number of solutions GOAL has against RULEBASE."
@@ -35,14 +35,14 @@
   ((adult ?x)                    :set (((?x . tom)) ((?x . bob)) ((?x . alice)))))
 
 (deftest-queries iso-not-unifiable ((make-rulebase))
-  ((cl-prolog:|\\=| tom alice)   :ordered (nil))
-  ((cl-prolog:|\\=| ?x ?y)      :fails)
-  ((cl-prolog:|\\=| tom alice)   :succeeds))
+  ((cl-prolog-kit:|\\=| tom alice)   :ordered (nil))
+  ((cl-prolog-kit:|\\=| ?x ?y)      :fails)
+  ((cl-prolog-kit:|\\=| tom alice)   :succeeds))
 
 (deftest-queries control-flow-builtins ((make-family-rulebase))
   ((true)                        :ordered (nil))
-  ((cl-prolog::fail)             :fails)
-  ((cl-prolog::false)            :fails)
+  ((cl-prolog-kit::fail)             :fails)
+  ((cl-prolog-kit::false)            :fails)
   ((= ?x left)                   :ordered (((?x . left))))
   ((= left right)                :fails)
   ((unify_with_occurs_check ?x (node value))
@@ -53,8 +53,8 @@
   ((and (= ?goal (parent alice tom)) (not ?goal))
                                    :ordered (((?goal parent alice tom))))
   ((and (= ?goal (parent tom bob)) (not ?goal)) :fails)
-  ((cl-prolog::|\\+| (parent alice tom)) :ordered (nil))
-  ((cl-prolog::|\\+| (parent tom bob)) :fails)
+  ((cl-prolog-kit::|\\+| (parent alice tom)) :ordered (nil))
+  ((cl-prolog-kit::|\\+| (parent tom bob)) :fails)
   ((and)                         :ordered (nil))
   ((and (parent tom bob) (parent bob alice)) :ordered (nil))
   ((and (parent tom ?x) (parent ?x alice))   :ordered (((?x . bob))))
@@ -92,8 +92,8 @@
                                    :ordered (((?x . left) (?n . 1))))
   ((or (call_nth (and ! fail) 1) (= ?side fallback))
                                    :ordered (((?side . fallback))))
-  ((cl-prolog.user-atoms::ignore (choice ?x)) :ordered (((?x . left))))
-  ((cl-prolog.user-atoms::ignore fail) :ordered (nil))
+  ((cl-prolog-kit.user-atoms::ignore (choice ?x)) :ordered (((?x . left))))
+  ((cl-prolog-kit.user-atoms::ignore fail) :ordered (nil))
   ((forall (choice ?x) (or (= ?x left) (= ?x right))) :ordered (nil))
   ((forall (choice ?x) (= ?x left)) :fails)
   ((forall fail (throw unreachable)) :ordered (nil))

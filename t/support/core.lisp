@@ -1,6 +1,6 @@
 ;;;; Test runner and table-driven assertions.
 
-(in-package #:cl-prolog.tests)
+(in-package #:cl-prolog-kit.tests)
 
 (defparameter *test-timeout-seconds* 10)
 
@@ -93,7 +93,7 @@
   "Format FORMAT-CONTROL with FORMAT-ARGUMENTS (if any) and read the result
 as a Prolog query term using RULEBASE's operator table."
   (read-prolog-term (apply #'format nil format-control format-arguments)
-                     (cl-prolog::rulebase-operator-table rulebase)))
+                     (cl-prolog-kit::rulebase-operator-table rulebase)))
 
 (defun query-error-summary (rulebase goal &key with-data)
   "Run GOAL against RULEBASE, returning NIL on success or the signalled
@@ -134,7 +134,7 @@ condition's normalized ISO error-term payload as a second list element."
 (defmacro with-closed-io-context ((context) &body body)
   "Run BODY, then close every stream CONTEXT owns, even if BODY errors."
   `(unwind-protect (progn ,@body)
-     (cl-prolog::%close-all-owned-prolog-streams! ,context)))
+     (cl-prolog-kit::%close-all-owned-prolog-streams! ,context)))
 
 (defun package-owned-symbol-count (package-designator)
   "Return the number of symbols PACKAGE-DESIGNATOR's package owns (interns

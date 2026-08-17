@@ -8,7 +8,7 @@
 ;;;; answer cache and the tabled CPS resolution that consume it are runtime.
 ;;;; It loads before prover.lisp, which also queries the index directly.
 
-(in-package #:cl-prolog)
+(in-package #:cl-prolog-kit)
 
 (defparameter +tabling-transparent-control-strategies+ '(("NOT" . :unary)
     ("\\+" . :unary)
