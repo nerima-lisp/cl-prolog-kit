@@ -111,6 +111,7 @@ source-loading transaction."
     ((consult ensure_loaded)
      (unless (= (length goal) 2)
        (error "~A directive requires one source argument." (first goal)))
+     (%check-file-access-capability! rulebase (second goal) nil (first goal))
      (%load-prolog-source-into-rulebase
       (%source-file-pathnames (second goal) nil (first goal))
       rulebase initializations
@@ -118,6 +119,7 @@ source-loading transaction."
     (load_files
      (unless (member (length goal) '(2 3))
        (error "LOAD_FILES directive requires sources and optional options."))
+     (%check-file-access-capability! rulebase (second goal) nil 'load_files)
      (%load-prolog-source-into-rulebase
       (%source-file-pathnames (second goal) nil 'load_files)
       rulebase initializations
@@ -139,6 +141,7 @@ source-loading transaction."
     (include
      (unless (= (length goal) 2)
        (error "INCLUDE directive requires one source argument."))
+     (%check-file-access-capability! rulebase (second goal) nil 'include)
      (dolist (pathname (%source-file-pathnames (second goal) nil 'include))
        (%call-with-prolog-source-stream
         (%canonical-prolog-source-pathname pathname)

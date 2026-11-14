@@ -387,3 +387,37 @@ call it after BODY returns."
            (declare (ignorable ,rulebase ,environment ,depth ,emit))
            (destructuring-bind ,argument-list (rest ,goal)
              ,@body))))))
+
+;;; Capability policy enforcement
+
+(defun %foreign-predicate-allowed-p (policy predicate arity)
+  "True when POLICY lets goals call the foreign predicate PREDICATE/ARITY."
+  (let ((allowed (prolog-capability-policy-allowed-foreign-predicates policy)))
+    (or (eq allowed :all)
+        (some (lambda (indicator)
+                (and (eql (second indicator) arity)
+                     (%same-atom-text-p (first indicator) predicate)))
+              allowed))))
+
+(defun %check-foreign-predicate-capability!
+    (rulebase predicate arity environment operation)
+  "Raise permission_error(execute, foreign_predicate, PREDICATE/ARITY) unless
+RULEBASE's capability policy allows calling that foreign predicate."
+  (let ((policy (rulebase-capability-policy rulebase)))
+    (when (and policy
+               (not (%foreign-predicate-allowed-p policy predicate arity)))
+      (%raise-permission-error
+       "EXECUTE" "FOREIGN_PREDICATE" (list '/ predicate arity)
+       environment operation
+       "the capability policy does not allow this foreign predicate"))))
+
+(defun %check-file-access-capability! (rulebase file environment operation)
+  "Raise permission_error(open, source_sink, FILE) unless RULEBASE's capability
+policy allows opening files by name."
+  (let ((policy (rulebase-capability-policy rulebase)))
+    (when (and policy
+               (not (prolog-capability-policy-allow-file-access policy)))
+      (%raise-permission-error
+       "OPEN" "SOURCE_SINK" (logic-substitute file environment)
+       environment operation
+       "the capability policy does not allow file access"))))

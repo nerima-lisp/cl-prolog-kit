@@ -166,6 +166,7 @@ ISO atom naming this predicate."
     (%check-stream-alias alias environment operation)
     (multiple-value-bind (access-mode direction)
         (%validate-prolog-stream-mode mode environment operation)
+      (%check-file-access-capability! rulebase source environment operation)
       (let ((stream (handler-case
                         (open path
                               :direction (if (eq direction :input) :input :output)

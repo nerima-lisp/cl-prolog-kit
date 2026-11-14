@@ -36,6 +36,13 @@ is extensible (see DEFINE-FOREIGN-PREDICATE).")
    #:copy-rulebase
    #:rulebase-extend
    #:rulebase-insert-clause!
+   ;; capability policy
+   #:rulebase-capability-policy
+   #:prolog-capability-policy
+   #:prolog-capability-policy-p
+   #:make-prolog-capability-policy
+   #:prolog-capability-policy-allow-file-access
+   #:prolog-capability-policy-allowed-foreign-predicates
    ;; atoms
    #:prolog-atom
    #:prolog-atom-text

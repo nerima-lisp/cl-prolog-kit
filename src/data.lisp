@@ -7,6 +7,39 @@
 
 (in-package #:cl-prolog-kit)
 
+(defstruct (prolog-capability-policy
+            (:constructor %make-prolog-capability-policy
+                (allow-file-access allowed-foreign-predicates))
+            (:copier nil))
+  "Restrictions a rulebase places on the Prolog goals it runs.
+
+ALLOW-FILE-ACCESS permits builtins and directives that open a file by name.
+ALLOWED-FOREIGN-PREDICATES is :ALL or a list of (NAME ARITY) indicators naming
+the foreign predicates goals may call."
+  (allow-file-access nil :read-only t)
+  (allowed-foreign-predicates '() :type (or (eql :all) list) :read-only t))
+
+(defun make-prolog-capability-policy (&key (allow-file-access nil)
+                                           (allowed-foreign-predicates '()))
+  "Return a capability policy; see PROLOG-CAPABILITY-POLICY."
+  (unless (or (eq allowed-foreign-predicates :all)
+              (and (listp allowed-foreign-predicates)
+                   (every (lambda (indicator)
+                            (and (consp indicator)
+                                 (symbolp (first indicator))
+                                 (consp (rest indicator))
+                                 (typep (second indicator) '(integer 0 *))
+                                 (null (cddr indicator))))
+                          allowed-foreign-predicates)))
+    (error 'type-error
+           :datum allowed-foreign-predicates
+           :expected-type '(or (eql :all) list)))
+  (%make-prolog-capability-policy
+   (and allow-file-access t)
+   (if (eq allowed-foreign-predicates :all)
+       :all
+       (mapcar #'copy-list allowed-foreign-predicates))))
+
 (defstruct (rulebase (:copier nil) (:constructor %make-rulebase))
   "An ordered logical-update database of clauses."
   (entries '() :type list)
@@ -24,6 +57,8 @@
   (operator-table *standard-operator-table* :type operator-table)
   (predicate-properties (make-hash-table :test #'equal) :type hash-table)
   (io-context (make-prolog-io-context) :type prolog-io-context)
+  ;; NIL means unrestricted.  Read on every foreign dispatch and file open.
+  (capability-policy nil :type (or null prolog-capability-policy))
   (module-registry (make-module-registry) :type module-registry)
   (source-registry (%make-source-registry) :type hash-table)
   (prolog-flag-values (make-hash-table :test #'equal) :type hash-table)
@@ -71,8 +106,10 @@
     state))
 
 (defun make-rulebase (&key (clauses '())
-                           (io-context (make-prolog-io-context)))
-  "Return a rulebase containing CLAUSES in resolution order."
+                           (io-context (make-prolog-io-context))
+                           (capability-policy nil))
+  "Return a rulebase containing CLAUSES in resolution order.
+CAPABILITY-POLICY, a PROLOG-CAPABILITY-POLICY or NIL, restricts its goals."
   (let ((entries
           (mapcar (lambda (clause)
                     (%make-owned-stored-clause
@@ -87,7 +124,8 @@
        :predicate-tails predicate-tails
        :predicate-descriptors
        (%make-rulebase-predicate-descriptors predicate-index 0)
-       :io-context io-context))))
+       :io-context io-context
+       :capability-policy capability-policy))))
 
 (defun %copy-rulebase (rulebase &optional (copy-clause #'identity))
   "Return a detached mutable copy suitable for transactional updates.
@@ -122,6 +160,7 @@ COPY-CLAUSE maps each stored clause into the copy; immutable templates are share
        :predicate-properties
        (%copy-hash-table (rulebase-predicate-properties rulebase))
        :io-context (%copy-prolog-io-context (rulebase-io-context rulebase))
+       :capability-policy (rulebase-capability-policy rulebase)
        :module-registry (module-registry-copy (rulebase-module-registry rulebase))
        :source-registry (%copy-source-registry (rulebase-source-registry rulebase))
        :prolog-flag-values
@@ -170,6 +209,7 @@ source registrations, flags, and character conversions are copied as well."
                      rulebase-operator-table
                      rulebase-predicate-properties
                      rulebase-io-context
+                     rulebase-capability-policy
                      rulebase-module-registry
                      rulebase-source-registry
                      rulebase-prolog-flag-values

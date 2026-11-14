@@ -118,6 +118,10 @@ Return (VALUES NORMALIZED-GOAL EXPLICIT-MODULE)."
         (if static-solver
             (multiple-value-bind (resolved-goal resolved-module)
                 (%resolve-dispatched-goal goal state environment context)
+              (unless builtin-solver
+                (%check-foreign-predicate-capability!
+                 (proof-state-rulebase state) predicate arity
+                 environment context))
               (values resolved-goal resolved-module static-solver))
             (values goal nil nil)))
       (multiple-value-bind (resolved-goal resolved-module)
@@ -126,6 +130,10 @@ Return (VALUES NORMALIZED-GOAL EXPLICIT-MODULE)."
                (arity (length (rest resolved-goal)))
                (builtin-solver (%goal-solver predicate arity))
                (foreign-solver (%foreign-goal-solver predicate arity)))
+          (when (and foreign-solver (not builtin-solver))
+            (%check-foreign-predicate-capability!
+             (proof-state-rulebase state) predicate arity
+             environment context))
           (values resolved-goal resolved-module
                   (or builtin-solver foreign-solver))))))
 
