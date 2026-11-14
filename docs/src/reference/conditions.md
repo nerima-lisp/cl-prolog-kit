@@ -28,6 +28,22 @@ an incomplete search is never mistaken for "no solutions".
 The reader returns the offending value or goal for diagnostics. See
 [Semantics](semantics.md) for what each depth value permits.
 
+## Inference budget and deadline
+
+| Condition                         | Reader                                  | Signalled when |
+| --------------------------------- | --------------------------------------- | -------------- |
+| `prolog-inference-limit-exceeded` | `prolog-inference-limit-exceeded-limit` | A query dispatches more goals than `:max-inferences` (or `*max-prolog-inferences*`) allows. |
+| `prolog-deadline-exceeded`        | `prolog-deadline-exceeded-deadline`     | A query is running when its `:deadline` (or `*prolog-deadline*`) has passed. |
+
+The readers return the budget and the deadline that were exceeded. Both are
+subclasses of `prolog-resource-error` and carry an ISO
+`resource_error(inferences)` or `resource_error(deadline)` term, but Prolog
+`catch/3` does not intercept them: like `halt`, they always reach the Lisp
+caller. Cleanup goals of `setup_call_cleanup/3` and `call_cleanup/2` still run
+while the stack unwinds. Invalid limit values signal a plain `type-error`. See
+[Runtime Resource Limits](api.md#inference-budget-and-deadline) for how the
+limits are counted and how nested queries share them.
+
 ## Structurally invalid goals
 
 | Condition            | Reader                    | Signalled when |
@@ -116,6 +132,16 @@ Because these are ordinary Common Lisp conditions, standard handlers apply:
   (prolog-depth-limit-exceeded (c)
     (format t "~&gave up at goal: ~S~%"
             (prolog-depth-limit-exceeded-goal c))))
+```
+
+A host that runs untrusted rules can bound every query the same way:
+
+```lisp
+(handler-case
+    (query-prolog *rb* '(main) :max-inferences 1000000
+                               :deadline (prolog-deadline-after 5))
+  (prolog-inference-limit-exceeded () :too-many-inferences)
+  (prolog-deadline-exceeded () :timed-out))
 ```
 
 For failures *inside* Prolog, prefer Prolog-level `catch/3` and `throw/1` — see

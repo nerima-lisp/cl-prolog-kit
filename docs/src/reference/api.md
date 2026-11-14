@@ -82,8 +82,11 @@ registry and its defining machinery are internal implementation details.
 - `solution-binding`
 
 The query functions accept an explicit rulebase and query. The mapping and
-list-returning APIs support `:max-depth`, `:environment`, `:project`, and
-`:limit`; `prolog-succeeds-p` supports `:max-depth`. See
+list-returning APIs support `:max-depth`, `:environment`, `:project`,
+`:limit`, `:max-inferences`, and `:deadline`; `prolog-succeeds-p` supports
+`:max-depth`, `:max-inferences`, and `:deadline`, and `with-prolog-query`
+forwards the same three. The last two are described under
+[Runtime Resource Limits](#runtime-resource-limits). See
 [Querying](../guide/querying.md) for contracts and result shapes.
 
 ## Parser, Writer, and Loader
@@ -152,6 +155,51 @@ single builtin call may materialize at **runtime**:
 
 See [Semantics](semantics.md#builtin-output-resource-limit) for the behavioral
 notes.
+
+### Inference budget and deadline
+
+Two more limits bound a whole query rather than one builtin call. Both are off
+by default.
+
+- `*max-prolog-inferences*`: the default inference budget of a top-level
+  query, `nil` (unbounded) or a non-negative integer. One inference is one goal
+  dispatch, including user-rule calls made on the compiled rule-program path,
+  builtin calls, and goals run inside `findall/3`, `setof/3`, `call/N`, `\+`
+  and other meta-calls of the same query. A query that needs more raises
+  `prolog-inference-limit-exceeded`.
+- `*prolog-deadline*`: the default deadline, `nil` or an absolute
+  `get-internal-real-time` value. A query still running at the deadline raises
+  `prolog-deadline-exceeded`. The deadline is checked when the query starts and
+  then at least once every 256 inferences, so a single long-running builtin
+  call can overrun it.
+- `(prolog-deadline-after seconds)` returns the `get-internal-real-time` value
+  `seconds` (a non-negative real) from now.
+
+The query options `:max-inferences` and `:deadline` override the specials for
+one call. An explicit `nil` turns the limit off for a query that is not
+nested inside another (see below). A value of the
+wrong type, in an option or in a special, signals `type-error`.
+
+```lisp
+(query-prolog *rb* '(ancestor tom ?who)
+              :max-inferences 100000
+              :deadline (prolog-deadline-after 2))
+```
+
+A foreign predicate can start another top-level query while one is running.
+If that nested query passes neither `:max-inferences` nor `:deadline` (or
+passes `nil` for both), it shares the enclosing query's remaining budget and
+deadline, so the enclosing limits still bound the whole computation. If it
+passes a non-`nil` value for either option, it runs under its own limits
+(the passed values, with the specials filling in the other one), and its
+inferences are not charged to the enclosing query.
+
+Both conditions are `prolog-resource-error` subclasses, but Prolog `catch/3`
+does not intercept them, so a goal cannot catch its way past its own budget.
+The stack still unwinds normally: `setup_call_cleanup/3` and `call_cleanup/2`
+run their cleanup goal. That cleanup gets a fresh budget of 10000 inferences
+and no deadline, because the exhausted budget would otherwise stop it at its
+first goal.
 
 ## Capability Policy
 
@@ -363,6 +411,9 @@ signalled and how to handle it, see
   `invalid-max-depth-error-value`
 - Depth exhaustion: `prolog-depth-limit-exceeded` and reader
   `prolog-depth-limit-exceeded-goal`
+- Inference and deadline limits: `prolog-inference-limit-exceeded` with reader
+  `prolog-inference-limit-exceeded-limit`, and `prolog-deadline-exceeded` with
+  reader `prolog-deadline-exceeded-deadline`
 - Structurally invalid goals: `invalid-goal-error` and reader
   `invalid-goal-error-goal`
 - Prolog throws: `prolog-exception` and reader `prolog-exception-term`
