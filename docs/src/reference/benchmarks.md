@@ -18,7 +18,29 @@ It covers:
 - alias-chain resolution,
 - predicate and first-argument indexing,
 - recursive path queries,
-- branching path queries.
+- branching path queries,
+- table-answer replay and the left-recursion cache,
+- knowledge-base workloads, whose names start with `kb/`:
+  - `kb/small-query-fixed-cost`: the per-call cost of `prolog-succeeds-p`,
+    `query-prolog-first`, and `query-prolog` against a 20-fact rulebase,
+  - `kb/bulk-insert-10000`: loading 10000 facts into an empty rulebase by
+    repeated `rulebase-insert-clause!`, by `make-rulebase :clauses`, and by
+    `rulebase-insert-clauses!` when the loaded source defines it, plus
+    `kb/bulk-insert-2000/assertz-query-loop`, a failure-driven
+    `between/3` and `assertz/1` loop,
+  - `kb/string-first-arg-lookup-5000`, `kb/atom-first-arg-lookup-5000`, and
+    `kb/compound-first-arg-lookup-5000`: a bound first argument that matches
+    the first, middle, or last fact, or none, with string, symbol, or
+    compound keys (the compound keys use 50 distinct functors),
+  - `kb/setof-2000`: `setof/3` grouped by a free variable over 20 groups, and
+    over all facts with the group variable existentially quantified,
+  - `kb/max-inferences-overhead`: the small-query workload with
+    `:max-inferences 1000000`, run only when the loaded source accepts that
+    option.
+
+Workloads that need an API the loaded source lacks are skipped without
+output, so the same script measures the release before and after the API is
+added.
 
 Each is measured after warm-up so the numbers reflect steady state rather than
 first-call compilation.

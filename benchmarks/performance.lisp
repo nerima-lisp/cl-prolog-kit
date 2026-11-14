@@ -397,3 +397,267 @@
 
   (benchmark-table-answer-replay)
   (benchmark-left-recursion-cache))
+
+;;; Knowledge-base workloads (names prefixed kb/).  They must run unchanged
+;;; against v1.5.0 and later sources, so optional APIs are looked up by name
+;;; and probed at run time instead of being referenced directly.
+(progn
+  (defun kb-variable (name)
+    (cl-prolog-kit:fresh-logic-variable name))
+
+  (defun kb-optional-function (name)
+    (let ((symbol (find-symbol name '#:cl-prolog-kit)))
+      (and symbol (fboundp symbol) (symbol-function symbol))))
+
+  (defun kb-repeat-check (iterations thunk message)
+    (dotimes (iteration iterations t)
+      (declare (ignore iteration))
+      (unless (funcall thunk)
+        (error message))))
+
+  (defun make-kb-small-rulebase ()
+    (cl-prolog-kit:make-rulebase
+     :clauses (loop for index below 20
+                    collect (cl-prolog-kit:make-clause
+                             (list 'kb-item index
+                                   (intern (format nil "VALUE-~D" index)
+                                           '#:keyword))))))
+
+  (defun benchmark-kb-small-queries (prefix options)
+    "Time tiny queries; OPTIONS are passed to every query entry point."
+    (let* ((rulebase (make-kb-small-rulebase))
+           (ground (list 'kb-item 7 :value-7))
+           (variable (kb-variable "?VALUE"))
+           (open-goal (list 'kb-item 7 variable))
+           (iterations 1000))
+      (flet ((succeeds ()
+               (apply #'cl-prolog-kit:prolog-succeeds-p rulebase ground options))
+             (first-binding ()
+               (multiple-value-bind (solution found)
+                   (apply #'cl-prolog-kit:query-prolog-first
+                          rulebase open-goal options)
+                 (and found
+                      (eq :value-7
+                          (cl-prolog-kit:solution-binding variable solution)))))
+             (all-solutions ()
+               (let ((solutions (apply #'cl-prolog-kit:query-prolog
+                                       rulebase open-goal options)))
+                 (and (= 1 (length solutions))
+                      (eq :value-7
+                          (cl-prolog-kit:solution-binding
+                           variable (first solutions)))))))
+        (assert (succeeds))
+        (assert (first-binding))
+        (assert (all-solutions))
+        (assert (not (apply #'cl-prolog-kit:prolog-succeeds-p
+                            rulebase (list 'kb-item 7 :value-8) options)))
+        (run-benchmark
+         (format nil "~A/succeeds-ground" prefix)
+         (lambda () (kb-repeat-check iterations #'succeeds
+                                     "Small ground query failed."))
+         iterations 15 5)
+        (run-benchmark
+         (format nil "~A/query-first-one-variable" prefix)
+         (lambda () (kb-repeat-check iterations #'first-binding
+                                     "Small query-prolog-first failed."))
+         iterations 15 5)
+        (run-benchmark
+         (format nil "~A/query-all-one-solution" prefix)
+         (lambda () (kb-repeat-check iterations #'all-solutions
+                                     "Small query-prolog failed."))
+         iterations 15 5))))
+
+  (defun max-inferences-option-supported-p ()
+    "True when this source accepts :MAX-INFERENCES on every query entry point.
+v1.5.0 signals PROGRAM-ERROR for an unknown query option or keyword."
+    (let ((rulebase (make-kb-small-rulebase))
+          (goal (list 'kb-item 0 :value-0)))
+      (handler-case
+          (and (cl-prolog-kit:prolog-succeeds-p rulebase goal)
+               (apply #'cl-prolog-kit:prolog-succeeds-p
+                      rulebase goal '(:max-inferences 1000000))
+               (nth-value 1 (apply #'cl-prolog-kit:query-prolog-first
+                                   rulebase goal '(:max-inferences 1000000)))
+               (apply #'cl-prolog-kit:query-prolog
+                      rulebase goal '(:max-inferences 1000000))
+               t)
+        (program-error () nil))))
+
+  (defun make-kb-bulk-clauses (count)
+    (loop for index below count
+          collect (cl-prolog-kit:make-clause (list 'kb-bulk index))))
+
+  (defun kb-bulk-rulebase-valid-p (rulebase count)
+    (let* ((variable (kb-variable "?INDEX"))
+           (solutions (cl-prolog-kit:query-prolog
+                       rulebase (list 'kb-bulk variable))))
+      (and (= count (length solutions))
+           (= (first-argument-solution-checksum solutions variable)
+              (/ (* count (1- count)) 2))
+           (eql (1- count)
+                (cl-prolog-kit:solution-binding variable (car (last solutions)))))))
+
+  (defun benchmark-kb-bulk-insert ()
+    (let* ((count 10000)
+           (clauses (make-kb-bulk-clauses count))
+           (bulk-insert (kb-optional-function "RULEBASE-INSERT-CLAUSES!"))
+           (variants
+             (append
+              (list
+               ;; Per-clause insertion refreshes the predicate descriptor each
+               ;; time, so v1.5.0 spends seconds per sample here: keep the
+               ;; sample count low.
+               (list "insert-clause-loop" 3 1
+                     (lambda ()
+                       (let ((rulebase (cl-prolog-kit:make-rulebase)))
+                         (dolist (clause clauses rulebase)
+                           (cl-prolog-kit:rulebase-insert-clause!
+                            rulebase clause :position :last)))))
+               (list "make-rulebase-clauses" 7 2
+                     (lambda () (cl-prolog-kit:make-rulebase :clauses clauses))))
+              (when bulk-insert
+                (list
+                 (list "insert-clauses" 7 2
+                       (lambda ()
+                         (funcall bulk-insert (cl-prolog-kit:make-rulebase)
+                                  clauses :position :last))))))))
+      (loop for (label samples warmup thunk) in variants
+            do (unless (kb-bulk-rulebase-valid-p (funcall thunk) count)
+                 (error "Bulk insert variant ~A built a wrong rulebase." label))
+               (run-benchmark (format nil "kb/bulk-insert-~D/~A" count label)
+                              thunk count samples warmup))))
+
+  (defun benchmark-kb-assertz-loop ()
+    (let* ((count 2000)
+           (index (kb-variable "?INDEX"))
+           (query (list (list 'cl-prolog-kit::between 1 count index)
+                        (list 'cl-prolog-kit:assertz (list 'kb-dynamic index))
+                        (list 'cl-prolog-kit:fail)))
+           (check (kb-variable "?CHECK")))
+      (flet ((run ()
+               (let ((rulebase (cl-prolog-kit:make-rulebase)))
+                 (when (cl-prolog-kit:prolog-succeeds-p rulebase query)
+                   (error "Failure-driven assertz loop unexpectedly succeeded."))
+                 rulebase)))
+        (let ((solutions (cl-prolog-kit:query-prolog
+                          (run) (list 'kb-dynamic check))))
+          (assert (= count (length solutions)))
+          (assert (= (first-argument-solution-checksum solutions check)
+                     (/ (* count (1+ count)) 2))))
+        (run-benchmark (format nil "kb/bulk-insert-~D/assertz-query-loop" count)
+                       #'run count 7 2))))
+
+  (defun make-kb-lookup-rulebase (count key-function)
+    (cl-prolog-kit:make-rulebase
+     :clauses (loop for index below count
+                    collect (cl-prolog-kit:make-clause
+                             (list 'kb-lookup (funcall key-function index) index)))))
+
+  (defun benchmark-kb-first-arg-lookup (kind key-function)
+    "Bound first-argument lookups at head, middle and tail, plus a miss."
+    (let* ((count 5000)
+           (rulebase (make-kb-lookup-rulebase count key-function))
+           (iterations 100))
+      (loop for (position index expected) in
+                (list (list "head" 0 t)
+                      (list "middle" (floor count 2) t)
+                      (list "tail" (1- count) t)
+                      (list "miss" count nil))
+            do (let* ((key (funcall key-function index))
+                      (variable (kb-variable "?INDEX"))
+                      (goal (list 'kb-lookup key index)))
+                 (multiple-value-bind (solution found)
+                     (cl-prolog-kit:query-prolog-first
+                      rulebase (list 'kb-lookup key variable))
+                   (unless (if expected
+                               (and found
+                                    (eql index (cl-prolog-kit:solution-binding
+                                                variable solution)))
+                               (not found))
+                     (error "~A lookup at ~A returned ~S." kind position solution)))
+                 (run-benchmark
+                  (format nil "kb/~A-first-arg-lookup-~D/~A" kind count position)
+                  (lambda ()
+                    (dotimes (iteration iterations t)
+                      (declare (ignore iteration))
+                      (unless (eq expected
+                                  (cl-prolog-kit:prolog-succeeds-p rulebase goal))
+                        (error "~A lookup at ~A changed result." kind position))))
+                  iterations 11 3)))))
+
+  (defun kb-string-key (index)
+    (format nil "cmd~D" index))
+
+  (defun kb-atom-key (index)
+    (intern (format nil "CMD~D" index) '#:keyword))
+
+  (defun kb-compound-key (index)
+    ;; 50 distinct functors with 100 facts each: a functor/arity index narrows
+    ;; a lookup to one group, and the remaining arguments pick the fact.
+    (list (intern (format nil "OP~D" (mod index 50)) '#:keyword)
+          (format nil "x~D" index)
+          index))
+
+  (defun make-kb-setof-rulebase (count groups)
+    (cl-prolog-kit:make-rulebase
+     :clauses (loop for index below count
+                    collect (cl-prolog-kit:make-clause
+                             (list 'kb-member (mod index groups)
+                                   ;; Reverse order so setof has to sort.
+                                   (- count index))))))
+
+  (defun benchmark-kb-setof ()
+    (let* ((count 2000)
+           (groups 20)
+           (rulebase (make-kb-setof-rulebase count groups))
+           (group (kb-variable "?GROUP"))
+           (member (kb-variable "?MEMBER"))
+           (members (kb-variable "?MEMBERS"))
+           (all-member (kb-variable "?ALL-MEMBER"))
+           (all-group (kb-variable "?ALL-GROUP"))
+           (all-members (kb-variable "?ALL-MEMBERS"))
+           (grouped-query
+             (list (list 'cl-prolog-kit:setof member
+                         (list 'kb-member group member) members)))
+           (all-query
+             (list (list 'cl-prolog-kit:setof all-member
+                         (list 'cl-prolog-kit::^ all-group (list 'kb-member all-group all-member))
+                         all-members))))
+      (flet ((grouped ()
+               (let ((solutions (cl-prolog-kit:query-prolog rulebase grouped-query)))
+                 (unless (and (= groups (length solutions))
+                              (every (lambda (solution)
+                                       (let ((bag (cl-prolog-kit:solution-binding
+                                                   members solution)))
+                                         (and (= (/ count groups) (length bag))
+                                              (apply #'< bag))))
+                                     solutions))
+                   (error "Grouped setof returned incorrect solutions."))
+                 solutions))
+             (all ()
+               (let* ((solutions (cl-prolog-kit:query-prolog rulebase all-query))
+                      (bag (cl-prolog-kit:solution-binding
+                            all-members (first solutions))))
+                 (unless (and (= 1 (length solutions))
+                              (= count (length bag))
+                              (eql 1 (first bag))
+                              (apply #'< bag))
+                   (error "Setof over all facts returned incorrect solutions."))
+                 solutions)))
+        (grouped)
+        (all)
+        (run-benchmark (format nil "kb/setof-~D/grouped-~D" count groups)
+                       #'grouped 1 11 3)
+        (run-benchmark (format nil "kb/setof-~D/all" count)
+                       #'all 1 11 3))))
+
+  (benchmark-kb-small-queries "kb/small-query-fixed-cost" '())
+  (benchmark-kb-bulk-insert)
+  (benchmark-kb-assertz-loop)
+  (benchmark-kb-first-arg-lookup "string" #'kb-string-key)
+  (benchmark-kb-first-arg-lookup "atom" #'kb-atom-key)
+  (benchmark-kb-first-arg-lookup "compound" #'kb-compound-key)
+  (benchmark-kb-setof)
+  (when (max-inferences-option-supported-p)
+    (benchmark-kb-small-queries "kb/max-inferences-overhead"
+                                '(:max-inferences 1000000))))
