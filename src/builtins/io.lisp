@@ -313,6 +313,15 @@ ISO atom naming this predicate."
          (resolved-position (%io-resolve-term position environment operation)))
     (%require-bounded-integer resolved-position environment operation
                               "Stream position")
+    ;; A host-supplied stream may be a file; repositioning it would let a rule
+    ;; overwrite content it could not open itself.
+    (let ((policy (rulebase-capability-policy rulebase)))
+      (when (and policy
+                 (not (prolog-capability-policy-allow-file-access policy)))
+        (%raise-permission-error "REPOSITION" "STREAM"
+                                 (%io-public-designator entry)
+                                 environment operation
+                                 "the capability policy does not allow repositioning")))
     (unless (ignore-errors
               (file-position (prolog-stream-stream entry) resolved-position))
       (%raise-permission-error "REPOSITION" "STREAM"

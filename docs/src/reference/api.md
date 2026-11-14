@@ -195,6 +195,32 @@ dispatch, so it applies however the goal is reached, including `call/N`,
 `findall/3`, and `\+`. The allowlist does not apply to builtins. Write each
 entry with the symbol given to `define-foreign-predicate`.
 
+When `allow-file-access` is false, `set_stream_position/2` also raises
+`permission_error(reposition, stream, S)`, so a rule cannot move back in a
+stream and overwrite what was already written.
+
+The standard streams `user_input`, `user_output`, and `user_error` are
+supplied by the host, and a rule can read and write them under any policy.
+`make-rulebase` takes them from `*standard-input*`, `*standard-output*`, and
+`*error-output*` when it is called. For untrusted rules, bind those variables
+to in-memory streams (`make-string-input-stream`,
+`make-string-output-stream`) or null streams (`(make-broadcast-stream)`)
+around the `make-rulebase` call, so a rule cannot write to a file the host
+had open:
+
+```lisp
+(let ((*standard-input* (make-string-input-stream ""))
+      (*standard-output* (make-string-output-stream))
+      (*error-output* (make-broadcast-stream)))
+  (make-rulebase :capability-policy (make-prolog-capability-policy)))
+```
+
+Allowlisted foreign predicates are trusted code: they run with full Lisp
+privileges and receive the rulebase, so the policy does not restrict them.
+`halt/0` and `halt/1` are allowed under a policy; they signal `prolog-halt`
+to the host, which `catch/3` cannot intercept, and do not exit the process
+by themselves.
+
 `copy-rulebase` and `rulebase-extend` copy the policy. Loading source with
 `consult-prolog` or a loading builtin works on a copy and publishes it on
 success; the policy is kept through that as well.

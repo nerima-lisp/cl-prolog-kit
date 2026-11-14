@@ -266,3 +266,40 @@
                               assertz(denied)))."
      rulebase)
     (is (capability-text-succeeds-p rulebase "denied"))))
+
+(deftest capability-policy-denies-stream-repositioning ()
+  (flet ((rulebase-with (policy)
+           (make-rulebase
+            :io-context (cl-prolog-kit::make-prolog-io-context
+                         :input (make-string-input-stream "")
+                         :output (make-string-output-stream)
+                         :error-output (make-string-output-stream))
+            :capability-policy policy)))
+    (let ((denied (rulebase-with (make-prolog-capability-policy))))
+      (handler-case
+          (progn (capability-text-succeeds-p
+                  denied "set_stream_position(user_output, 0)")
+                 (is nil "set_stream_position must be denied"))
+        (prolog-permission-error (condition)
+          (let ((formal (second (prolog-exception-term condition))))
+            (is-equal '("PERMISSION_ERROR" "REPOSITION" "STREAM")
+                      (capability-formal-names formal))
+            (is-equal "user_output" (prolog-atom-text (fourth formal))))))
+      (is (capability-text-succeeds-p
+           denied
+           "catch(set_stream_position(user_output, 0), ~
+            error(permission_error(reposition, stream, user_output), _), ~
+            true)")))
+    (is (capability-text-succeeds-p
+         (rulebase-with (make-prolog-capability-policy :allow-file-access t))
+         "set_stream_position(user_output, 0)"))
+    (is (capability-text-succeeds-p
+         (rulebase-with nil) "set_stream_position(user_output, 0)"))))
+
+(deftest capability-policy-standard-streams-follow-bindings-at-construction ()
+  (let* ((output (make-string-output-stream))
+         (rulebase (let ((*standard-output* output))
+                     (make-rulebase
+                      :capability-policy (make-prolog-capability-policy)))))
+    (is (capability-text-succeeds-p rulebase "write(captured)"))
+    (is-equal "captured" (get-output-stream-string output))))
