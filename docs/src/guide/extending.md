@@ -91,6 +91,23 @@ than mutates, so older environments remain valid choice points. See the
 - Calling a known name at an unsupported arity denotes a different, undefined
   procedure and signals an ISO `existence_error`.
 
+## Foreign predicates under a capability policy
+
+A rulebase with a [capability policy](../reference/api.md#capability-policy)
+runs only the foreign predicates its allowlist names; a `nil` policy runs all
+of them. To let untrusted rules call `twice/2`, list it explicitly:
+
+```lisp
+(setf (rulebase-capability-policy rulebase)
+      (make-prolog-capability-policy
+       :allowed-foreign-predicates '((twice 2))))
+```
+
+An allowed foreign predicate runs with full Lisp privileges. The policy does
+not restrict what its body does, and the body receives the rulebase, so it
+could even replace the policy. Allow only predicates whose effects you would
+accept from any caller.
+
 ## Guards are not foreign predicates
 
 The `(:when expression)` guard in the [Rule DSL](rule-dsl.md) is a lighter

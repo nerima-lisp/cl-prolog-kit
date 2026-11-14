@@ -153,6 +153,52 @@ single builtin call may materialize at **runtime**:
 See [Semantics](semantics.md#builtin-output-resource-limit) for the behavioral
 notes.
 
+## Capability Policy
+
+A rulebase can restrict what the Prolog goals it runs may do. This is for
+running rules written by someone the host does not trust. The policy covers
+file access and foreign predicates only. It does not limit `halt/0`,
+changes to the rulebase through `assertz/1` and `retract/1`, or resource use;
+see [Runtime Resource Limits](#runtime-resource-limits) for the last.
+
+- `prolog-capability-policy`, `prolog-capability-policy-p`: the immutable
+  policy struct
+- `make-prolog-capability-policy`:
+  `(make-prolog-capability-policy &key (allow-file-access nil) (allowed-foreign-predicates '()))`.
+  `allowed-foreign-predicates` is `:all` or a list of `(name arity)`
+  indicators, such as `'((lookup-user 2))`; any other value signals a
+  `type-error`
+- `prolog-capability-policy-allow-file-access`,
+  `prolog-capability-policy-allowed-foreign-predicates`: readers
+- `rulebase-capability-policy`: the rulebase's policy, `setf`-able. It
+  defaults to `nil`, which means unrestricted. `make-rulebase` accepts
+  `:capability-policy`. A change takes effect at the next goal dispatch, even
+  inside a running query
+
+When `allow-file-access` is false, the following raise the catchable ISO
+error `permission_error(open, source_sink, File)` before touching the
+filesystem: `open/3`, `open/4`, `consult/1`, `load_files/1`, `load_files/2`,
+`ensure_loaded/1`, and the `include`, `consult`, `ensure_loaded`, and
+`load_files` directives inside loaded source text. These are all the ways a
+Prolog goal can open a file by name. `File` is the source argument as
+written, so it is a list when a list of files was passed. Uncaught, the error
+reaches Lisp as `prolog-permission-error`. Builtins that work on
+streams the host already opened (`read/1`, `write/1`, `nl/0`, and the rest of
+the stream I/O) stay available. The host's own Lisp calls are not restricted:
+`(consult-prolog #p"rules.pl" rulebase)` still opens the named file, but a
+directive inside that file that loads another file is denied.
+
+Calling a foreign predicate (one defined with `define-foreign-predicate`)
+that the allowlist does not name raises
+`permission_error(execute, foreign_predicate, Name/Arity)`. The check runs at
+dispatch, so it applies however the goal is reached, including `call/N`,
+`findall/3`, and `\+`. The allowlist does not apply to builtins. Write each
+entry with the symbol given to `define-foreign-predicate`.
+
+`copy-rulebase` and `rulebase-extend` copy the policy. Loading source with
+`consult-prolog` or a loading builtin works on a copy and publishes it on
+success; the policy is kept through that as well.
+
 ## Rule DSL
 
 - `prolog`
