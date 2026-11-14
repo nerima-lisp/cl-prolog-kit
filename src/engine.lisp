@@ -14,6 +14,16 @@
 (defparameter *max-prolog-depth* nil
   "Default rule-resolution depth bound; NIL means unbounded search.")
 
+(defparameter *max-prolog-inferences* nil
+  "Default inference budget of one top-level query; NIL means unbounded.
+
+One inference is one goal dispatch.  A query that needs more raises
+PROLOG-INFERENCE-LIMIT-EXCEEDED.")
+
+(defparameter *prolog-deadline* nil
+  "Default absolute GET-INTERNAL-REAL-TIME deadline of a top-level query, or
+NIL for none.  See PROLOG-DEADLINE-AFTER.")
+
 (defparameter *max-prolog-builtin-output-length* 1048576
   "Maximum number of characters or list elements a single builtin call may
 materialize in one step (format fill/repeat runs, numlist ranges, and similar).
@@ -103,6 +113,37 @@ Deliberately not a PROLOG-EXCEPTION: catch/3 must not intercept it."))
                      (prolog-depth-limit-exceeded-goal condition))))
   (:documentation "Signalled when proof search would exceed an explicit rule depth bound."))
 
+(define-condition prolog-inference-limit-exceeded (prolog-resource-error)
+  ((limit :initarg :limit :reader prolog-inference-limit-exceeded-limit))
+  (:report (lambda (condition stream)
+             (format stream "Prolog inference limit of ~D exceeded."
+                     (prolog-inference-limit-exceeded-limit condition))))
+  (:documentation "Signalled when a query dispatches more goals than its
+inference budget allows.  Prolog catch/3 does not intercept it."))
+
+(define-condition prolog-deadline-exceeded (prolog-resource-error)
+  ((deadline :initarg :deadline :reader prolog-deadline-exceeded-deadline))
+  (:report (lambda (condition stream)
+             (format stream "Prolog query deadline ~D passed."
+                     (prolog-deadline-exceeded-deadline condition))))
+  (:documentation "Signalled when a query is still running at its deadline.
+Prolog catch/3 does not intercept it."))
+
+(deftype %catchable-prolog-exception ()
+  "Prolog exceptions that catch/3 may intercept.  Inference and deadline
+limits are excluded so a goal cannot catch its way past its own budget."
+  '(and prolog-exception
+        (not prolog-inference-limit-exceeded)
+        (not prolog-deadline-exceeded)))
+
+(defun prolog-deadline-after (seconds)
+  "Return the GET-INTERNAL-REAL-TIME value SECONDS (a non-negative real) from
+now, for use as a :DEADLINE query option or *PROLOG-DEADLINE*."
+  (unless (typep seconds '(real 0))
+    (error 'type-error :datum seconds :expected-type '(real 0)))
+  (+ (get-internal-real-time)
+     (ceiling (* seconds internal-time-units-per-second))))
+
 (defun %validate-max-depth (value)
   "Return VALUE when it is a valid rule depth bound, otherwise signal an error."
   (unless (typep value '(or null (integer 0 *)))
@@ -168,15 +209,19 @@ declares one in +PROLOG-RUNTIME-ERROR-SPECIFICATIONS+."
 
 (progn
   (defun %raise-resource-error
-      (resource environment operation message &key condition-type goal)
+      (resource environment operation message
+       &key condition-type (goal nil goal-p) initargs)
+    "Raise a resource_error/1 for RESOURCE.  CONDITION-TYPE selects a
+PROLOG-RESOURCE-ERROR subclass, which receives GOAL (when supplied) and the
+extra INITARGS plist."
     (let ((term (%iso-error-term
                  (%iso-term "RESOURCE_ERROR" (%iso-atom resource))
                  operation message)))
       (if condition-type
-          (error condition-type
+          (apply #'error condition-type
                  :term term
                  :environment environment
-                 :goal goal)
+                 (if goal-p (list* :goal goal initargs) initargs))
           (error 'prolog-resource-error
                  :term term
                  :environment environment))))

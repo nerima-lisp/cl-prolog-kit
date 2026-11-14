@@ -28,15 +28,22 @@ over their logic variables."
   "Return a clause value for HEAD :- BODY without mutating a rulebase."
   `(make-clause ',head ,(%rule-body-form body)))
 
-(defmacro with-prolog-query (binding-vars (rulebase query &key (max-depth '*max-prolog-depth*))
+(defmacro with-prolog-query (binding-vars (rulebase query
+                                           &key (max-depth '*max-prolog-depth*)
+                                             (max-inferences nil max-inferences-p)
+                                             (deadline nil deadline-p))
                              &body body)
   "Bind BINDING-VARS from the first solution of QUERY and run BODY.
 
-BODY is skipped entirely when QUERY has no proof."
+BODY is skipped entirely when QUERY has no proof.  MAX-INFERENCES and
+DEADLINE are forwarded to QUERY-PROLOG-FIRST only when supplied."
   (let ((solution (gensym "SOLUTION"))
         (succeeded-p (gensym "SUCCEEDED-P")))
     `(multiple-value-bind (,solution ,succeeded-p)
-         (query-prolog-first ,rulebase ,query :max-depth ,max-depth)
+         (query-prolog-first ,rulebase ,query :max-depth ,max-depth
+                             ,@(when max-inferences-p
+                                 `(:max-inferences ,max-inferences))
+                             ,@(when deadline-p `(:deadline ,deadline)))
        (declare (ignorable ,solution))
        (when ,succeeded-p
          (let ,(mapcar (lambda (variable)

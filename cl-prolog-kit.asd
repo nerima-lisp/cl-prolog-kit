@@ -155,6 +155,7 @@
                (:file "engine-runtime-foreign-and-registration-test")
                (:file "capability-policy-test")
                (:file "engine-runtime-error-contract-test")
+               (:file "inference-and-deadline-limits-test")
                (:file "builtin-term-test")
                (:file "builtin-atom-test")
                (:file "builtin-operator-test")

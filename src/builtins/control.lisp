@@ -184,10 +184,11 @@ CLEANUP failure is ignored, while a condition raised by CLEANUP propagates."
         (labels ((run-cleanup ()
                    (unless cleanup-ran-p
                      (setf cleanup-ran-p t)
-                     (%first-proof-environment
-                      (%resolve-callable-goal cleanup cleanup-environment
-                                              operation)
-                      rulebase cleanup-environment depth))))
+                     (%with-cleanup-inference-allowance
+                       (%first-proof-environment
+                        (%resolve-callable-goal cleanup cleanup-environment
+                                                operation)
+                        rulebase cleanup-environment depth)))))
           (unwind-protect
                (%prove-bindings/k
                 (%resolve-callable-goal goal setup-environment operation)
@@ -313,10 +314,10 @@ still shares the caller's cut barrier."
          (lambda (goal-environment)
            (handler-case
                (funcall emit goal-environment)
-             (prolog-exception (condition)
+             (%catchable-prolog-exception (condition)
                (setf continuation-condition condition)
                (error condition)))))
-      (prolog-exception (condition)
+      (%catchable-prolog-exception (condition)
         (when (eq condition continuation-condition)
           (error condition))
         (multiple-value-bind (recovery-environment matched-p)

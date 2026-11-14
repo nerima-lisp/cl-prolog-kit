@@ -210,7 +210,9 @@ Return (VALUES NORMALIZED-GOAL EXPLICIT-MODULE)."
             normalized-goal explicit-module state environment context succeed)))))))
 
 (defun %prove-goal/k (goal state succeed)
-  "Prove GOAL, counting every dispatched call for local depth limits."
+  "Prove GOAL, counting every dispatched call for inference and local depth
+limits."
+  (%count-inference)
   (if (null *call-depth-limit-token*)
       (%prove-goal-dispatch/k goal state succeed)
       (progn
@@ -584,19 +586,21 @@ body throws here, abandoning the remaining clause alternatives."
   (multiple-value-bind (entries direct-p)
       (%rule-program-direct-entries instruction variables state)
     (if direct-p
-        (if (null *call-depth-limit-token*)
-            (%prove-rule-program-direct/k
-             instruction variables entries state succeed)
-            (progn
-              (when (zerop *call-depth-limit-remaining*)
-                (cl:throw *call-depth-limit-token*
-                          *call-depth-limit-token*))
-              (let ((*call-depth-limit-remaining*
-                      (1- *call-depth-limit-remaining*))
-                    (*call-depth-limit-used*
-                      (1+ *call-depth-limit-used*)))
-                (%prove-rule-program-direct/k
-                 instruction variables entries state succeed))))
+        (progn
+          (%count-inference)
+          (if (null *call-depth-limit-token*)
+              (%prove-rule-program-direct/k
+               instruction variables entries state succeed)
+              (progn
+                (when (zerop *call-depth-limit-remaining*)
+                  (cl:throw *call-depth-limit-token*
+                            *call-depth-limit-token*))
+                (let ((*call-depth-limit-remaining*
+                        (1- *call-depth-limit-remaining*))
+                      (*call-depth-limit-used*
+                        (1+ *call-depth-limit-used*)))
+                  (%prove-rule-program-direct/k
+                   instruction variables entries state succeed)))))
         (let ((goal
                 (or (svref goal-cache pc)
                     (setf (svref goal-cache pc)

@@ -43,28 +43,51 @@
       (if (eq value missing) default value))))
 
 (defun %decode-query-options (options)
-  "Return query option values as (VALUES MAX-DEPTH ENVIRONMENT PROJECT LIMIT)."
+  "Return query option values as
+(VALUES MAX-DEPTH ENVIRONMENT PROJECT LIMIT MAX-INFERENCES DEADLINE).
+
+MAX-INFERENCES and DEADLINE are :DEFAULT when absent; see
+%CALL-WITH-INFERENCE-LIMITS."
   (unless (evenp (length options))
     (error 'program-error))
   (loop for key in options by (function cddr)
-        do (unless (member key (quote (:max-depth :environment :project :limit)))
+        do (unless (member key (quote (:max-depth :environment :project :limit
+                                       :max-inferences :deadline)))
              (error 'program-error)))
-  (let ((limit (%query-option options :limit nil)))
+  (let ((limit (%query-option options :limit nil))
+        (max-inferences (%query-option options :max-inferences :default))
+        (deadline (%query-option options :deadline :default)))
     (unless (typep limit (quote (or null (integer 1 *))))
       (error 'type-error
              :datum limit
              :expected-type (quote (or null (integer 1 *)))))
+    (unless (eq max-inferences :default)
+      (%validate-max-inferences max-inferences))
+    (unless (eq deadline :default)
+      (%validate-deadline deadline))
     (values (%validate-max-depth
              (%query-option options :max-depth *max-prolog-depth*))
             (%query-option options :environment nil)
             (%query-option options :project t)
-            limit)))
+            limit
+            max-inferences
+            deadline)))
 
-(defmacro %with-query-options ((options max-depth environment project limit) &body body)
-  "Bind public query option names decoded from OPTIONS."
-  `(multiple-value-bind (,max-depth ,environment ,project ,limit)
-       (%decode-query-options ,options)
-     ,@body))
+(defmacro %with-query-options ((options max-depth environment project limit
+                                &optional (max-inferences (gensym "MAX-INFERENCES"))
+                                  (deadline (gensym "DEADLINE")))
+                               &body body)
+  "Bind public query option names decoded from OPTIONS and run BODY as one
+top-level query under the decoded inference and deadline limits."
+  (let ((declarations (loop while (and (consp (first body))
+                                       (eq (first (first body)) 'declare))
+                            collect (pop body))))
+    `(multiple-value-bind (,max-depth ,environment ,project ,limit
+                           ,max-inferences ,deadline)
+         (%decode-query-options ,options)
+       ,@declarations
+       (%with-inference-limits (,max-inferences ,deadline)
+         ,@body))))
 
 (defun %map-prolog-solutions*
     (function rulebase query max-depth environment project limit)
@@ -149,9 +172,21 @@ distinguishes that case from failure."
                               max-depth environment project 1)
       (values nil nil))))
 
-(defun prolog-succeeds-p (rulebase query &key (max-depth *max-prolog-depth*))
-  "Return true when QUERY has at least one proof in RULEBASE."
-  (%provable-p query rulebase '() (%validate-max-depth max-depth)))
+(defun prolog-succeeds-p (rulebase query
+                          &key (max-depth *max-prolog-depth*)
+                            (max-inferences *max-prolog-inferences*
+                             max-inferences-p)
+                            (deadline *prolog-deadline* deadline-p))
+  "Return true when QUERY has at least one proof in RULEBASE.
+
+MAX-INFERENCES and DEADLINE behave as the query options of the same names."
+  (let ((max-depth (%validate-max-depth max-depth)))
+    (%with-inference-limits
+        ((if max-inferences-p
+             (%validate-max-inferences max-inferences)
+             :default)
+         (if deadline-p (%validate-deadline deadline) :default))
+      (%provable-p query rulebase '() max-depth))))
 
 (defun solution-binding (variable solution)
   "Return VARIABLE's value from a solution alist."

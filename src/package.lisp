@@ -57,6 +57,13 @@ is extensible (see DEFINE-FOREIGN-PREDICATE).")
    #:invalid-max-depth-error-value
    #:prolog-depth-limit-exceeded
    #:prolog-depth-limit-exceeded-goal
+   #:*max-prolog-inferences*
+   #:*prolog-deadline*
+   #:prolog-deadline-after
+   #:prolog-inference-limit-exceeded
+   #:prolog-inference-limit-exceeded-limit
+   #:prolog-deadline-exceeded
+   #:prolog-deadline-exceeded-deadline
    #:invalid-goal-error
    #:invalid-goal-error-goal
    #:prolog-exception
