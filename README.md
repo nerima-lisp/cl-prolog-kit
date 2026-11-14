@@ -33,6 +33,13 @@ Prolog source text works too:
 (query-prolog (consult-prolog #p"family.pl") (read-prolog-term "ancestor(tom, Who)"))
 ```
 
+A rulebase is owned by one thread at a time, because even read-only queries
+update its internal caches, and the library takes no locks. To query the
+same knowledge from another thread, call `(rulebase-snapshot rulebase)` in
+the owning thread and pass the snapshot to the other thread. See
+[Threads](https://nerima-lisp.github.io/cl-prolog-kit/reference/api/#threads)
+in the API reference.
+
 ## Install
 
 cl-prolog-kit is not on Quicklisp. Clone it and load its ASDF definition, or put

@@ -17,6 +17,8 @@ examples.
 - Rulebase representation: `rulebase`, `rulebase-p`,
   `rulebase-visible-clauses`, `make-rulebase`, `copy-rulebase`,
   `rulebase-extend`, `rulebase-insert-clause!`
+- Snapshots and temporary clauses: `rulebase-snapshot`,
+  `call-with-overlay-facts`, `with-overlay-facts`
 
 A clause with an empty body is a fact. Rulebases are explicit values; the
 library has no global rulebase. Prefer `prolog` and `extend-rulebase` for
@@ -27,8 +29,45 @@ goals provide intentional mutation with logical-update semantics.
 base. It copies stored terms and mutable registries while allowing immutable
 metadata to be shared.
 
+`(rulebase-snapshot rulebase)` returns a new rulebase with the same visible
+clauses, flags, operators, predicate properties, modules, source
+registrations, and table declarations. It shares the immutable clause terms
+and compiled clause templates instead of copying them, so it is cheaper than
+`copy-rulebase`; everything mutable is the snapshot's own. Later asserts,
+retracts, or declarations on either rulebase do not affect the other. The
+snapshot's I/O registry refers to the same underlying Lisp streams as the
+original, so writes to those streams from two threads must be serialized by
+the caller.
+
+`(call-with-overlay-facts rulebase clauses function)` appends `clauses`
+(`clause` objects from `make-clause`, facts or rules) to `rulebase` in place,
+after the clauses already defined for the same predicates. It then calls
+`function` and retracts exactly those clauses when `function` returns or
+exits non-locally, and returns `function`'s values. Clauses that `function`
+asserts or retracts itself stay as they are, and an overlay clause that
+`function` already retracted is not retracted again.
+`(with-overlay-facts (rulebase clauses) &body body)` is the macro form. The
+overlay does not change predicate properties: a predicate that gets clauses
+only from the overlay is static, so `assertz` or `retract` on it inside
+`function` raises a permission error, as for any static predicate.
+
 The exported symbol `clause` names the clause type/accessor API and is also
 the Lisp representation of the exported `clause/2` builtin goal.
+
+## Threads
+
+A rulebase must be used by one thread at a time. Read-only queries also
+write to a rulebase: they fill its lookup caches and may compact retracted
+clauses. The library adds no locks. To query the same knowledge from another
+thread, the thread that owns the rulebase calls `(rulebase-snapshot
+rulebase)` and passes the result to the other thread. An overlay
+(`with-overlay-facts`) mutates its rulebase, so it follows the same rule.
+
+Parsing Prolog text updates process-wide parser caches without a lock. This
+covers `read-prolog-term`, `consult-prolog`, and builtins that parse text
+such as `read/1`, `read_term/2`, `term_to_atom/2`, and
+`read_term_from_atom/3`. Parse text in one thread at a time, even when each
+thread has its own rulebase.
 
 ## Atoms
 
