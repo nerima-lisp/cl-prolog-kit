@@ -36,6 +36,9 @@ is extensible (see DEFINE-FOREIGN-PREDICATE).")
    #:copy-rulebase
    #:rulebase-extend
    #:rulebase-insert-clause!
+   #:rulebase-snapshot
+   #:call-with-overlay-facts
+   #:with-overlay-facts
    ;; capability policy
    #:rulebase-capability-policy
    #:prolog-capability-policy

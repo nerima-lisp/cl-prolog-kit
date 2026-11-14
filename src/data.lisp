@@ -349,3 +349,73 @@ source registrations, flags, and character conversions are copied as well."
             (%refresh-rulebase-predicate-descriptor!
              rulebase module predicate arity)))))
     (not (null live))))
+
+(defun rulebase-snapshot (rulebase)
+  "Return a detached rulebase with RULEBASE's current visible state.
+
+Unlike COPY-RULEBASE, the immutable stored clause terms and compiled clause
+templates are shared rather than copied, so a snapshot costs one new
+stored-clause record per entry plus fresh lookup tables.  Every mutable
+part (clause lifetimes, predicate index, properties, flags, modules, source
+registry, table declarations, caches, and the I/O stream registry) belongs
+to the snapshot alone: later asserts, retracts, or declarations on either
+rulebase never affect the other.  The underlying Lisp streams of the I/O
+context are shared.
+
+A rulebase may be used by one thread at a time; hand another thread a
+snapshot rather than the rulebase itself."
+  (check-type rulebase rulebase)
+  (%copy-rulebase rulebase))
+
+(defun %rulebase-live-entries-sharing-templates (rulebase entries)
+  "Return RULEBASE's live stored clauses whose template belongs to ENTRIES.
+
+A loading transaction publishes copied stored-clause records that keep the
+original template (%COPY-RULEBASE, %REPLACE-RULEBASE!), and every insertion
+compiles a fresh template, so the template identifies one inserted clause
+even after its record has been replaced."
+  (let ((templates (make-hash-table :test #'eq))
+        (keys '())
+        (live '()))
+    (dolist (entry entries)
+      (setf (gethash (%stored-clause-template entry) templates) t)
+      (pushnew (%stored-clause-predicate-key entry) keys :test #'equal))
+    (flet ((collect (candidates)
+             (dolist (candidate candidates)
+               (when (and (null (%stored-clause-died-revision candidate))
+                          (gethash (%stored-clause-template candidate)
+                                   templates))
+                 (push candidate live)))))
+      ;; Clauses with a malformed head have no predicate key and live only
+      ;; in RULEBASE-ENTRIES; every other entry sits in exactly one bucket.
+      (if (member nil keys)
+          (collect (rulebase-entries rulebase))
+          (dolist (key keys)
+            (collect (gethash key (rulebase-predicate-index rulebase))))))
+    live))
+
+(defun call-with-overlay-facts (rulebase clauses function)
+  "Insert CLAUSES at the end of RULEBASE, call FUNCTION, then retract them.
+
+CLAUSES may be facts or rules.  The inserted clauses are retracted when
+FUNCTION returns or exits non-locally, and only those clauses: anything
+FUNCTION itself asserts or retracts is left as it is, and an overlay clause
+FUNCTION already retracted is not retracted again.  Returns FUNCTION's
+values."
+  (check-type rulebase rulebase)
+  (let ((inserted '()))
+    (unwind-protect
+         (progn
+           (dolist (clause clauses)
+             (rulebase-insert-clause! rulebase clause :position :last)
+             (push (car (rulebase-entries-tail rulebase)) inserted))
+           (funcall function))
+      (when inserted
+        (%rulebase-retract-entries!
+         rulebase
+         (%rulebase-live-entries-sharing-templates rulebase inserted))))))
+
+(defmacro with-overlay-facts ((rulebase clauses) &body body)
+  "Evaluate BODY with CLAUSES temporarily appended to RULEBASE.
+See CALL-WITH-OVERLAY-FACTS."
+  `(call-with-overlay-facts ,rulebase ,clauses (lambda () ,@body)))

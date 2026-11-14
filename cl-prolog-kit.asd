@@ -172,6 +172,7 @@
                (:file "builtin-pairs-test")
                (:file "builtin-fd-test")
                (:file "module-system-test")
+               (:file "overlay-and-snapshot-test")
                (:file "dcg-test")
                (:file "weave-public-test")
                (:file "weave-quality-test"))
