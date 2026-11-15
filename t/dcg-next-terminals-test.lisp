@@ -21,6 +21,9 @@ cut_after_terminal --> ['-v'], !, [x].
 cut_after_terminal --> ['-q'].
 cut_after_variable --> [X], { atom(X) }, !, [y].
 cut_after_variable --> ['-h'].
+cut_in_guard --> [X], { choose(X) }.
+choose(a) :- !.
+choose(b).
 
 opts(Seen) --> [].
 opts(Seen) --> ['-a'], { \\+ memberchk(b, Seen) }, opts([a|Seen]).
@@ -86,7 +89,11 @@ PREFIX are Prolog source text."
   (is-equal (next-terminals-expect "['-v', '-q']" nil nil)
             (next-terminals "cut_after_terminal" "[]"))
   (is-equal (next-terminals-expect "['-h']" t nil)
-            (next-terminals "cut_after_variable" "[]")))
+            (next-terminals "cut_after_variable" "[]"))
+  ;; The cut in choose/1 runs after the read and would commit to the first
+  ;; binding of X, though phrase(cut_in_guard, [b]) succeeds.
+  (is-equal (next-terminals-expect "[a, b]" nil nil)
+            (next-terminals "cut_in_guard" "[]")))
 
 (deftest next-terminals-check-guards-after-the-terminal ()
   (is-equal (next-terminals-expect "['-a', '-b', '-v']" nil t)
@@ -120,14 +127,27 @@ PREFIX are Prolog source text."
     (is-equal (list (cons :terminal (read-prolog-term "a"))) reported
               "candidates found before the limit were already delivered")))
 
+(defun next-terminals-variant (term)
+  "TERM with its variables renamed canonically, so answers compare by EQUAL."
+  (values (cl-prolog-kit::%canonicalize-variant term)))
+
 (deftest next-terminals-leave-the-shared-tables-intact ()
-  (let ((rulebase (next-terminals-rulebase))
-        (query (read-prolog-term "phrase(commit_opts, ['-m', x | T])")))
-    (let ((before (query-prolog (next-terminals-rulebase) query :limit 3)))
-      (phrase-next-terminals rulebase (read-prolog-term "git")
-                             (read-prolog-term "[git, commit]"))
-      (is (= 3 (length before)))
-      (is-equal (length before) (length (query-prolog rulebase query :limit 3))))))
+  ;; A probe's tables hold only the answers that did not read the tail.
+  ;; Kept in the rulebase's shared session they would answer the next probe
+  ;; on the same rulebase, which would then find nothing.
+  (let* ((rulebase (next-terminals-rulebase))
+         (query (read-prolog-term "phrase(git, [git, commit | T])"))
+         (before (query-prolog rulebase query :limit 3))
+         (probe (lambda ()
+                  (multiple-value-list
+                   (phrase-next-terminals rulebase (read-prolog-term "git")
+                                          (read-prolog-term "[git, commit]")))))
+         (first-probe (funcall probe)))
+    (is-equal 3 (length before))
+    (is-equal (next-terminals-variant before)
+              (next-terminals-variant (query-prolog rulebase query :limit 3)))
+    (is-equal (next-terminals-expect "['-m', '--amend']" nil t) first-probe)
+    (is-equal first-probe (funcall probe))))
 
 (deftest next-terminals-keep-constraint-propagation ()
   (is-equal '(nil nil nil) (next-terminals "fd_guarded" "[5]")
@@ -180,3 +200,31 @@ aux :- once(phrase(p, Y)), Y == [].")))
               (multiple-value-list
                (phrase-next-terminals rulebase (read-prolog-term "p") '()
                                       :max-inferences 100000)))))
+
+(define-foreign-predicate (next-terminals-nested-query token)
+    (rulebase environment depth emit)
+  (declare (cl:ignore token depth))
+  (query-prolog rulebase (read-prolog-term "X is Y"))
+  (funcall emit environment))
+
+(deftest next-terminals-pass-on-errors-of-nested-queries ()
+  ;; Only an instantiation error raised by the probed derivation itself
+  ;; stands for a guard that cannot decide the unknown token.
+  (signals-prolog-condition prolog-instantiation-error
+    (phrase-next-terminals
+     (prolog ((nested-guard ?s0 ?s)
+              (= ?s0 (?x . ?s))
+              (next-terminals-nested-query ?x)))
+     'nested-guard '())
+    "an error of a query nested in a foreign predicate reaches the caller"))
+
+(deftest next-terminals-pass-on-errors-of-the-callback ()
+  (signals-prolog-condition prolog-instantiation-error
+    (map-phrase-next-terminals
+     (lambda (kind value)
+       (declare (cl:ignore kind value))
+       (cl-prolog-kit::%raise-instantiation-error
+        nil (cl-prolog-kit::%iso-atom "CALLBACK") "raised by the callback"))
+     (next-terminals-rulebase) (read-prolog-term "spin") '()
+     :max-inferences 1000)
+    "an error of the callback reaches the caller"))

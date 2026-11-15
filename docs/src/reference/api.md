@@ -717,7 +717,8 @@ with `prolog-atom` and get a terminal's text back with `prolog-atom-text` (see
 `(map-phrase-next-terminals function rulebase nonterminal prefix &key ...)`
 takes the same arguments, calls `function` with `(:terminal term)`,
 `(:any nil)` or `(:end nil)` as each distinct item is found, and returns
-`nil`.
+`nil`. A condition that `function` does not handle stops the search and is
+signalled again from `map-phrase-next-terminals`, outside the grammar.
 
 ```lisp
 (defparameter *git*
@@ -752,14 +753,17 @@ value it binds.
 A derivation reports `T` early, without checking the rest of the clause, at
 the first of these. If `T` is still unbound, it sets `any-p`.
 
-- A cut that would prune alternatives chosen before `T` was read. The cut does
-  not run, so another next token can still take those alternatives.
+- A cut, including one inside a predicate that a guard calls. The cut does
+  not run: it would commit to choices made for `T` alone, so another next
+  token could no longer take the alternatives it prunes.
 - An answer for a table begun before `T` was read. Tables include predicates
   declared with `table/1` and those the engine tables on its own for left
   recursion. That includes any `-->` nonterminal that calls itself right after
   a terminal, such as `commit_opts` above, because the left-recursion analysis
   does not count terminals as calls.
-- An instantiation error.
+- An instantiation error raised by the derivation. An error from a query
+  nested in the derivation, such as one a foreign predicate runs, reaches the
+  caller instead.
 
 The query runs under the limits of
 [Inference budget and deadline](#inference-budget-and-deadline), with the
@@ -776,7 +780,8 @@ Limitations:
 - The result can include terminals no complete input accepts. Guards after a
   cut or a tabled nonterminal that ends the check are not run, and a terminal
   read inside `\+` is reported. Put a guard that excludes an option, such as a
-  mutually exclusive flag, directly after the terminal and before any cut.
+  mutually exclusive flag, directly after the terminal, and write it without
+  a cut.
 - Builtins such as `append/3` or `length/2` that bind the input list are not
   seen when they bind it. The binding is noticed at the next clause-head or
   `=/2` unification, or at the end of the phrase. A builtin that enumerates

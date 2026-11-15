@@ -142,10 +142,10 @@ Return (VALUES NORMALIZED-GOAL EXPLICIT-MODULE)."
   (defun %prove-cut-goal/k (state succeed)
     "Succeed once, then prune this predicate invocation's alternatives."
     (let ((phase *phrase-probe-phase*))
-      (if (and phase
-               (not (eq (second (proof-state-cut-tag state)) phase)))
-          ;; This cut would prune alternatives chosen before the probe read
-          ;; the open tail, which a different next token would still take.
+      (if phase
+          ;; Any cut run after the probe read the open tail commits to
+          ;; choices made for that one token, even inside a guard's own
+          ;; predicate, and would prune alternatives another token takes.
           (%phrase-probe-end-phase phase (proof-state-environment-index state))
           (progn
             (funcall succeed state)

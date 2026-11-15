@@ -386,12 +386,7 @@ caller's clause alternatives, as ISO requires.")
 
 (defun %make-cut-tag ()
   "Return a fresh CATCH tag identifying one cut barrier."
-  ;; A barrier made inside a probe phase records the phase, so the probe can
-  ;; tell a cut local to code run after the read from one that would prune
-  ;; alternatives chosen before it.
-  (if *phrase-probe-phase*
-      (list '%cut-barrier *phrase-probe-phase*)
-      (list '%cut-barrier)))
+  (list '%cut-barrier))
 
 (defstruct (proof-state
             (:constructor %make-proof-state

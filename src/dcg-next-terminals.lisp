@@ -8,9 +8,8 @@
 ;;;; - While the tail is unbound the branch is seeking.  The first time it is
 ;;;;   bound to [H|Rest] the branch enters a phase: the read is recorded only
 ;;;;   once the branch survives until Rest is read, a solution is reached, a
-;;;;   cut that would prune alternatives chosen before the read runs, a table
-;;;;   begun before the read gets an answer, or an instantiation error is
-;;;;   raised.  The branch then reports H (or :ANY while H is unbound) and
+;;;;   cut is about to run, a table begun before the read gets an answer, or
+;;;;   the derivation raises an instantiation error.  The branch then reports H (or :ANY while H is unbound) and
 ;;;;   fails, as a real token other than H would.  The phase lets a guard
 ;;;;   after the terminal reject it and lets a guard bind a variable terminal.
 ;;;; - A tail bound to [] reports :END and fails.
@@ -106,11 +105,14 @@ or neither."
         (handler-bind
             ((prolog-instantiation-error
                ;; A guard could not evaluate the unknown token; the read is
-               ;; reported as it stood when the phase began.
+               ;; reported as it stood when the phase began.  A query nested
+               ;; in the derivation rebinds the phase to NIL, so its errors
+               ;; are not taken for the guard's.
                (lambda (condition)
                  (declare (cl:ignore condition))
-                 (%phrase-probe-end-phase phase index)
-                 (cl:throw tag nil))))
+                 (when (eq *phrase-probe-phase* phase)
+                   (%phrase-probe-end-phase phase index)
+                   (cl:throw tag nil)))))
           (%phrase-probe-continue previous environment emit))))
     ;; A variable terminal whose guard failed while it was unbound (a type
     ;; test, a negation) is reported as :ANY rather than hidden.
@@ -230,13 +232,27 @@ MAX-INFERENCES and DEADLINE behave as the query options of the same names.
 Returns NIL."
   (unless (%proper-list-p prefix)
     (error 'type-error :datum prefix :expected-type 'list))
-  (let ((max-depth (%validate-max-depth max-depth)))
-    (%with-inference-limits
-        ((if max-inferences-p
-             (%validate-max-inferences max-inferences)
-             :default)
-         (if deadline-p (%validate-deadline deadline) :default))
-      (%probe-next-terminals function rulebase nonterminal prefix max-depth)))
+  (let* ((max-depth (%validate-max-depth max-depth))
+         (escape (list '%phrase-probe-callback))
+         (callback-condition
+           (cl:catch escape
+             (%with-inference-limits
+                 ((if max-inferences-p
+                      (%validate-max-inferences max-inferences)
+                      :default)
+                  (if deadline-p (%validate-deadline deadline) :default))
+               (%probe-next-terminals
+                ;; FUNCTION runs inside the probed derivation; a condition it
+                ;; does not handle is re-signalled from here, so neither the
+                ;; probe nor a catch/3 in the grammar can intercept it.
+                (lambda (kind value)
+                  (handler-case (funcall function kind value)
+                    (serious-condition (condition)
+                      (cl:throw escape condition))))
+                rulebase nonterminal prefix max-depth))
+             nil)))
+    (when callback-condition
+      (error callback-condition)))
   nil)
 
 (defun phrase-next-terminals (rulebase nonterminal prefix &rest options
