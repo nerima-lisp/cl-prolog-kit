@@ -269,6 +269,7 @@ is extensible (see DEFINE-FOREIGN-PREDICATE).")
    #:phrase-all
    #:phrase-next-terminals
    #:map-phrase-next-terminals
+   #:phrase-token-valid-p
    #:dcg-alt
    #:dcg-opt
    #:dcg-star

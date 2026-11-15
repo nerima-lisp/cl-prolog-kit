@@ -80,10 +80,9 @@ PREFIX are Prolog source text."
             (next-terminals "git" "[git, checkout]")))
 
 (deftest next-terminals-report-any-when-a-guard-cannot-decide ()
-  (is-equal '(nil t nil) (next-terminals "num" "[]")
-            "integer(N) fails on the unknown token")
-  (is-equal '(nil t nil) (next-terminals "long_word" "[]")
-            "atom_length/2 raises an instantiation error on the unknown token"))
+  ;; A type test or atom_length/2 on the unknown token is not run.
+  (is-equal '(nil t nil) (next-terminals "num" "[]"))
+  (is-equal '(nil t nil) (next-terminals "long_word" "[]")))
 
 (deftest next-terminals-do-not-let-a-later-cut-prune-other-tokens ()
   (is-equal (next-terminals-expect "['-v', '-q']" nil nil)
@@ -113,7 +112,7 @@ PREFIX are Prolog source text."
   (is-equal (next-terminals-expect "[a]" nil t)
             (next-terminals "as" "[a, a]" :max-inferences 100000)))
 
-(deftest next-terminals-signal-the-query-limits ()
+(deftest p7-next-terminals-signal-the-query-limits ()
   (signals-prolog-condition prolog-inference-limit-exceeded
     (next-terminals "spin" "[]" :max-inferences 1000))
   (signals-prolog-condition prolog-deadline-exceeded
@@ -208,15 +207,14 @@ aux :- once(phrase(p, Y)), Y == [].")))
   (funcall emit environment))
 
 (deftest next-terminals-pass-on-errors-of-nested-queries ()
-  ;; Only an instantiation error raised by the probed derivation itself
-  ;; stands for a guard that cannot decide the unknown token.
+  ;; The foreign predicate's argument shares nothing with the tail, so the
+  ;; probe runs it, and the error of its nested query reaches the caller.
   (signals-prolog-condition prolog-instantiation-error
     (phrase-next-terminals
      (prolog ((nested-guard ?s0 ?s)
-              (= ?s0 (?x . ?s))
-              (next-terminals-nested-query ?x)))
-     'nested-guard '())
-    "an error of a query nested in a foreign predicate reaches the caller"))
+              (next-terminals-nested-query none)
+              (= ?s0 (?x . ?s))))
+     'nested-guard '())))
 
 (deftest next-terminals-pass-on-errors-of-the-callback ()
   (signals-prolog-condition prolog-instantiation-error
@@ -242,13 +240,335 @@ aux :- once(phrase(p, Y)), Y == [].")))
 
 (deftest next-terminals-pass-on-errors-of-a-nested-probe-callback ()
   ;; The inner probe re-signals its callback's error from inside the outer
-  ;; derivation, after the outer probe has read the tail.  The outer probe
-  ;; must not take it for a guard that cannot decide the unknown token.
+  ;; derivation; nothing in the outer probe may absorb it.
   (let ((rulebase (prolog ((outer-word ?s0 ?s)
-                           (= ?s0 (?x . ?s))
-                           (next-terminals-nested-probe ?x))
+                           (next-terminals-nested-probe none)
+                           (= ?s0 (?x . ?s)))
                           ((inner-word ?s0 ?s)
                            (= ?s0 (a . ?s))))))
     (signals-prolog-condition prolog-instantiation-error
       (phrase-next-terminals rulebase 'outer-word '())
       "the inner callback's error reaches the caller")))
+;;; Properties P1-P7 of the two-stage design, checked against phrase/2.
+
+(defparameter *next-terminals-corpus*
+  "choose(a) :- !.
+choose(b).
+c1 --> [X], { choose(X) }.
+c2 --> [X], { once(member(X, [a,b])) }.
+c3 --> [X], { (X = a -> true ; X = b) }.
+c4 --> [f(X)], { \\+ (X = a) }.
+br(main).
+br(dev).
+gen_after --> [B], { br(B) }.
+gen_before --> { br(B) }, [B].
+flag('-a').
+flag('-b').
+flag('-v').
+excl('-a', '-b').
+excl('-b', '-a').
+ex_state --> st([]).
+st(_) --> [].
+st(S) --> ['-a'], { \\+ memberchk(b, S) }, st([a|S]).
+st(S) --> ['-b'], { \\+ memberchk(a, S) }, st([b|S]).
+st(S) --> ['-v'], st(S).
+ex_token --> tk([]).
+tk(_) --> [].
+tk(S) --> [F], { flag(F), \\+ memberchk(F, S), \\+ (excl(F, G), memberchk(G, S)) }, tk([F|S]).
+ex_guard_first --> tg([]).
+tg(_) --> [].
+tg(S) --> [F], { \\+ memberchk(F, S), \\+ (excl(F, G), memberchk(G, S)) }, { flag(F) }, tg([F|S]).
+tok(x).
+tok(y).
+not_x(S, S) :- \\+ S = [x|_].
+look --> not_x, [Y], { tok(Y) }.
+not_xz(S, S) :- \\+ S = [x, z|_].
+look2 --> not_xz, [x], [_].
+q --> [x].
+q --> [].
+cut_before --> q, !, [y].
+relax_cut --> ( not_x -> { true } ; [x] ), !, [y].
+ite_read --> ( [a] -> [b] ; [c] ).
+ite_var --> ( [X], { X == a } -> [b] ; [Y], { tok(Y) } ).
+vtq(S, S) :- var(S), !, fail.
+vtq(S, S).
+var_tail --> vtq, [z].
+ex2(S0, S) :- S0 = [k|S].
+explicit --> call(ex2).
+app(S0, S) :- append([k], S, S0).
+via_append --> app.
+g4 --> [X], { \\+ X = b }, { member(X, [a,b,c]) }.
+fa --> [X], { findall(Y, member(Y, [a,b]), L), member(X, L) }.
+expr --> expr, ['+'], num.
+expr --> num.
+num --> [N], { integer(N) }.
+as --> [].
+as --> as, [a].
+nb --> [N], { member(N, [1,2]) }, { N > 1 }.
+gen_after_foreign --> [B], { nt_branch(B) }.
+gen_before_foreign --> { nt_branch(B) }, [B].
+not_z(S, S) :- \\+ S = [z|_].
+look_after --> [X], { tok(X) }, not_z, [_].
+peek_x(S, S) :- \\+ \\+ S = [x|_].
+peek --> peek_x, [x]."
+  "The prototype's grammar corpus: each rule exercises one construct the
+probe classifies.")
+
+(define-foreign-predicate (#.(read-prolog-term "nt_branch") branch)
+    (rulebase environment depth emit)
+  (declare (cl:ignore rulebase depth))
+  (dolist (name '("main" "dev"))
+    (cl-prolog-kit::%unify-emit branch (read-prolog-term name) environment emit)))
+
+(defparameter *next-terminals-corpus-cases*
+  '(("c1" "[]") ("c2" "[]") ("c3" "[]") ("c4" "[]") ("gen_after" "[]")
+    ("gen_before" "[]") ("ex_state" "['-a']") ("ex_token" "['-a']")
+    ("ex_guard_first" "['-a']") ("look" "[]") ("look2" "[]") ("cut_before" "[]")
+    ("relax_cut" "[]") ("ite_read" "[]") ("ite_read" "[a]") ("ite_var" "[]")
+    ("var_tail" "[]") ("explicit" "[]") ("via_append" "[]") ("g4" "[]") ("fa" "[]")
+    ("expr" "[1]") ("as" "[a]") ("nb" "[]") ("gen_after_foreign" "[]")
+    ("gen_before_foreign" "[]") ("look_after" "[]") ("peek" "[]"))
+  "(NONTERMINAL PREFIX) pairs of the prototype harness, as Prolog text.")
+
+(defparameter *next-terminals-corpus-universe*
+  "[a, b, c, x, y, z, k, main, dev, '-a', '-b', '-v', f(a), f(b), '+', 1, 2, s(0)]")
+
+(defstruct (next-terminals-oracle (:constructor %make-next-terminals-oracle))
+  rulebase universe continuation-length (cache (make-hash-table :test #'equal)))
+
+(defun make-next-terminals-oracle (source universe continuation-length)
+  (%make-next-terminals-oracle :rulebase (consult-prolog source)
+                               :universe (read-prolog-term universe)
+                               :continuation-length continuation-length))
+
+(defun next-terminals-oracle-phrase-p (oracle nonterminal input)
+  "phrase/2 on the ground INPUT, the reference every property is checked
+against."
+  (let ((key (prin1-to-string (list nonterminal input))))
+    (multiple-value-bind (value present-p)
+        (gethash key (next-terminals-oracle-cache oracle))
+      (if present-p
+          value
+          (setf (gethash key (next-terminals-oracle-cache oracle))
+                (nth-value 1 (query-prolog-first
+                              (next-terminals-oracle-rulebase oracle)
+                              (list (read-prolog-term "phrase") nonterminal input)
+                              :max-inferences 20000)))))))
+
+(defun next-terminals-oracle-continuations (oracle)
+  "Every token list over the universe up to the oracle's length."
+  (let ((universe (next-terminals-oracle-universe oracle)))
+    (loop with all = (list '())
+          with layer = (list '())
+          repeat (next-terminals-oracle-continuation-length oracle)
+          do (setf layer (loop for continuation in layer
+                               append (loop for token in universe
+                                            collect (cons token continuation))))
+             (setf all (append all layer))
+          finally (return all))))
+
+(defun next-terminals-oracle-tokens (oracle nonterminal prefix)
+  "The universe tokens T for which PREFIX ++ [T|S] is a phrase for some S
+in the oracle's continuations."
+  (let ((continuations (next-terminals-oracle-continuations oracle)))
+    (loop for token in (next-terminals-oracle-universe oracle)
+          when (loop for continuation in continuations
+                     thereis (next-terminals-oracle-phrase-p
+                              oracle nonterminal
+                              (append prefix (cons token continuation))))
+            collect token)))
+
+(defun next-terminals-covered-p (token terminals any-p)
+  "TOKEN, ground, is covered when ANY-P or a reported terminal subsumes it."
+  (or any-p
+      (some (lambda (terminal) (nth-value 1 (unify terminal token))) terminals)))
+
+(defun next-terminals-check-case (oracle nonterminal prefix)
+  "Return (VALUES MISSED END-P TRUTH-END-P TERMINALS ANY-P) for one case."
+  (multiple-value-bind (terminals any-p end-p)
+      (phrase-next-terminals (next-terminals-oracle-rulebase oracle)
+                             nonterminal prefix :max-inferences 200000)
+    (values (remove-if (lambda (token)
+                         (next-terminals-covered-p token terminals any-p))
+                       (next-terminals-oracle-tokens oracle nonterminal prefix))
+            end-p
+            (next-terminals-oracle-phrase-p oracle nonterminal prefix)
+            terminals
+            any-p)))
+
+(defvar *next-terminals-corpus-oracle* nil)
+
+(defun next-terminals-corpus-oracle ()
+  ;; Continuations of one token: the longest any corpus rule needs after the
+  ;; candidate.
+  (or *next-terminals-corpus-oracle*
+      (setf *next-terminals-corpus-oracle*
+            (make-next-terminals-oracle *next-terminals-corpus*
+                                        *next-terminals-corpus-universe* 1))))
+
+(defun next-terminals-corpus-cases ()
+  (mapcar (lambda (case)
+            (list (read-prolog-term (first case)) (read-prolog-term (second case))))
+          *next-terminals-corpus-cases*))
+
+(deftest p1-next-terminals-cover-every-oracle-token (:timeout 120)
+  (let ((oracle (next-terminals-corpus-oracle)))
+    ;; The oracle itself must find tokens, or the check below is vacuous.
+    (is (< 40 (loop for (nonterminal prefix) in (next-terminals-corpus-cases)
+                    sum (length (next-terminals-oracle-tokens oracle nonterminal prefix)))))
+    (loop for (nonterminal prefix) in (next-terminals-corpus-cases)
+          do (is-equal (list nonterminal prefix '())
+                       (list nonterminal prefix
+                             (next-terminals-check-case oracle nonterminal prefix))))))
+
+(deftest p2-next-terminals-end-p-is-phrase-of-the-prefix (:timeout 120)
+  (let ((oracle (next-terminals-corpus-oracle)))
+    (loop for (nonterminal prefix) in (next-terminals-corpus-cases)
+          do (multiple-value-bind (missed end-p truth-end-p)
+                 (next-terminals-check-case oracle nonterminal prefix)
+               (declare (cl:ignore missed))
+               (is-equal (list nonterminal prefix truth-end-p)
+                         (list nonterminal prefix end-p))))))
+
+(deftest p3-next-terminals-ground-candidates-pass-the-token-check (:timeout 120)
+  (let ((oracle (next-terminals-corpus-oracle)))
+    (loop for (nonterminal prefix) in (next-terminals-corpus-cases)
+          do (dolist (terminal (fourth (multiple-value-list
+                                        (next-terminals-check-case
+                                         oracle nonterminal prefix))))
+               (when (null (cl-prolog-kit::%collect-variables terminal))
+                 (is-equal (list nonterminal prefix terminal t)
+                           (list nonterminal prefix terminal
+                                 (phrase-token-valid-p
+                                  (next-terminals-oracle-rulebase oracle)
+                                  nonterminal prefix terminal
+                                  :max-inferences 200000))))))))
+
+(deftest p4-next-terminals-token-check-accepts-every-oracle-token (:timeout 120)
+  (let ((oracle (next-terminals-corpus-oracle)))
+    (loop for (nonterminal prefix) in (next-terminals-corpus-cases)
+          do (dolist (token (next-terminals-oracle-tokens oracle nonterminal prefix))
+               (is-equal (list nonterminal prefix token t)
+                         (list nonterminal prefix token
+                               (phrase-token-valid-p
+                                (next-terminals-oracle-rulebase oracle)
+                                nonterminal prefix token
+                                :max-inferences 200000)))))
+    ;; The check also rejects: these tokens cannot continue any phrase.
+    (loop for (nonterminal prefix token) in '(("ex_token" "['-a']" "'-b'")
+                                              ("ex_guard_first" "['-a']" "'-b'")
+                                              ("gen_after" "[]" "feature")
+                                              ("c4" "[]" "f(a)")
+                                              ("num" "[]" "seven")
+                                              ("look" "[]" "x")
+                                              ("peek" "[]" "y")
+                                              ("ite_read" "[a]" "c"))
+          do (is-equal (list nonterminal token nil)
+                       (list nonterminal token
+                             (phrase-token-valid-p
+                              (next-terminals-oracle-rulebase oracle)
+                              (read-prolog-term nonterminal)
+                              (read-prolog-term prefix)
+                              (read-prolog-term token)
+                              :max-inferences 200000))))))
+
+;;; P5: each construct that can test a binding, applied to the parse state
+;;; before the read, the stream before the read, the read token, and the
+;;; stream after the read.  tv_C/1 holds when its argument is not x or is in
+;;; a set without x; sv_C//0 holds when the stream does not start with x.
+
+(defparameter *next-terminals-construct-names*
+  '("cut" "once" "ite" "not" "forall" "findall" "var" "eq" "memberchk" "copy"
+    "foreign"))
+
+(defparameter *next-terminals-construct-matrix*
+  (with-output-to-string (out)
+    (write-string "tv_cut(V) :- V = x, !, fail.
+tv_cut(_).
+tv_once(V) :- once(member(V, [y, z, w, q])).
+tv_ite(V) :- ( V = x -> fail ; true ).
+tv_not(V) :- \\+ V = x.
+tv_forall(V) :- forall(V = x, fail).
+tv_findall(V) :- findall(V, V = x, []).
+tv_var(V) :- nonvar(V).
+tv_eq(V) :- V \\== x.
+tv_memberchk(V) :- memberchk(V, [y, z, w, q]).
+tv_copy(V) :- copy_term(V, C), member(C, [y, z, w, q]).
+tv_foreign(V) :- nt_not_x(V).
+sv_cut(S, S) :- S = [x|_], !, fail.
+sv_cut(S, S).
+sv_once(S, S) :- once(S = [_|_]).
+sv_ite(S, S) :- ( S = [x|_] -> fail ; true ).
+sv_not(S, S) :- \\+ S = [x|_].
+sv_forall(S, S) :- forall(S = [x|_], fail).
+sv_findall(S, S) :- findall(S, S = [x|_], []).
+sv_var(S, S) :- nonvar(S).
+sv_eq(S, S) :- S \\== [x].
+sv_memberchk(S, S) :- memberchk(_, S).
+sv_copy(S, S) :- copy_term(S, C), C \\= [x|_].
+sv_foreign(S, S) :- nt_stream_ok(S).
+nest --> peek_x, [x].
+nest --> [y].
+peek_x(S, S) :- \\+ \\+ S = [x|_].
+not_x(S, S) :- \\+ S = [x|_].
+relaxed_cut --> ( not_x -> { true } ; [x] ), !, [y].
+" out)
+    (dolist (name *next-terminals-construct-names*)
+      (format out "m_~A_state --> { tv_~:*~A(q) }, [y].~%m_~:*~A_state --> [z].~%" name)
+      (format out "m_~A_stream --> sv_~:*~A, [y].~%m_~:*~A_stream --> [x], [z].~%" name)
+      (format out "m_~A_token --> [X], { tv_~:*~A(X) }, [y].~%m_~:*~A_token --> [x], [z].~%" name)
+      (format out "m_~A_rest --> [w], sv_~:*~A, [y].~%m_~:*~A_rest --> [w], [x], [z].~%" name)))
+  "One grammar per construct and position, as Prolog source.")
+
+(define-foreign-predicate (#.(read-prolog-term "nt_not_x") value)
+    (rulebase environment depth emit)
+  (declare (cl:ignore rulebase depth))
+  (let ((value (cl-prolog-kit::logic-substitute value environment)))
+    (unless (or (cl-prolog-kit::logic-var-p value) (eq value (read-prolog-term "x")))
+      (funcall emit environment))))
+
+(define-foreign-predicate (#.(read-prolog-term "nt_stream_ok") stream)
+    (rulebase environment depth emit)
+  (declare (cl:ignore rulebase depth))
+  (let ((stream (cl-prolog-kit::logic-substitute stream environment)))
+    (unless (or (cl-prolog-kit::logic-var-p stream)
+                (and (consp stream) (eq (first stream) (read-prolog-term "x"))))
+      (funcall emit environment))))
+
+(deftest p5-next-terminals-construct-position-matrix (:timeout 300)
+  ;; Continuations of two tokens: m_C_rest needs w, then two more.
+  (let ((oracle (make-next-terminals-oracle *next-terminals-construct-matrix*
+                                            "[x, y, z, w, q]" 2)))
+    (dolist (nonterminal
+             (append (loop for name in *next-terminals-construct-names*
+                           append (loop for position in '("state" "stream" "token" "rest")
+                                        collect (format nil "m_~A_~A" name position)))
+                     '("nest" "relaxed_cut")))
+      (dolist (prefix '("[]" "[w]"))
+        (let ((nonterminal (read-prolog-term nonterminal))
+              (prefix (read-prolog-term prefix)))
+          (multiple-value-bind (missed end-p truth-end-p)
+              (next-terminals-check-case oracle nonterminal prefix)
+            (is-equal (list nonterminal prefix '() truth-end-p)
+                      (list nonterminal prefix missed end-p))))))))
+
+(deftest p6-next-terminals-report-any-for-an-infinite-generator-in-bounded-time
+    (:timeout 120)
+  ;; nat/1 generates ever larger tokens; the phase budget ends the branch
+  ;; with ANY-P well inside the inference budget.  It takes well under a
+  ;; second unloaded; the 30 s bound leaves a wide margin for a loaded CI
+  ;; runner while still failing on the cubic growth the budget prevents
+  ;; (a budget of 2000 ran past two minutes).
+  (let ((rulebase (consult-prolog "nat(0).
+nat(s(N)) :- nat(N).
+peano --> [X], { nat(X) }."))
+        (start (get-internal-real-time)))
+    (multiple-value-bind (terminals any-p end-p)
+        (phrase-next-terminals rulebase (read-prolog-term "peano") '()
+                               :max-inferences 200000
+                               :deadline (prolog-deadline-after 60))
+      (is any-p)
+      (is (not end-p))
+      (is (every (lambda (terminal) (null (cl-prolog-kit::%collect-variables terminal)))
+                 terminals)))
+    (is (< (/ (- (get-internal-real-time) start) internal-time-units-per-second) 30))))

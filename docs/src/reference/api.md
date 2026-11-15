@@ -681,7 +681,8 @@ indicator; see
 ## DCG
 
 - Grammar definition and execution: `def-dcg-rule`, `phrase`, `phrase-all`
-- Continuation queries: `phrase-next-terminals`, `map-phrase-next-terminals`
+- Continuation queries: `phrase-next-terminals`, `map-phrase-next-terminals`,
+  `phrase-token-valid-p`
 - Combinators: `dcg-alt`, `dcg-opt`, `dcg-star`, `dcg-plus`,
   `dcg-error-recovery`
 - Token matchers: `dcg-token-match`, `dcg-token-match-value`
@@ -692,33 +693,24 @@ DCG tokens are either a bare token-kind symbol or a `(kind . value)` cons.
 
 ### Next terminals after a prefix
 
-`(phrase-next-terminals rulebase nonterminal prefix &key max-depth max-inferences deadline)`
-returns `(values terminals any-p end-p)` for a token list `prefix` that a user
-has typed so far:
+Three functions answer what may follow a token list `prefix` that a user has
+typed so far:
 
-- `terminals`: the distinct terminals that may come next, in the order the
-  grammar's clauses produce them. A terminal that contains variables, such as
-  `f(_)`, is returned once however many clauses produce it, with fresh
-  variables.
-- `any-p`: true when some derivation accepts an arbitrary token next. This
-  happens for a terminal `[X]` when nothing binds `X`, including when a guard
-  on `X` fails or raises an instantiation error because the token is unknown.
-- `end-p`: true when `prefix` is itself a complete phrase. As with
-  `phrase/2`, the phrase must consume the whole input.
+- `(phrase-next-terminals rulebase nonterminal prefix &key max-depth max-inferences deadline)`
+  returns `(values terminals any-p end-p)`: the candidates for the next token,
+  for completion.
+- `(map-phrase-next-terminals function rulebase nonterminal prefix &key ...)`
+  takes the same arguments and calls `function` with `(:terminal term)`,
+  `(:any nil)` or `(:end nil)` as each distinct item is found. It returns
+  `nil`.
+- `(phrase-token-valid-p rulebase nonterminal prefix token &key ...)` checks
+  one typed, ground `token`, for marking an invalid token.
 
-All three empty means no input starting with `prefix` can be a phrase.
-`prefix` must be a proper list, otherwise `type-error` is signalled. Its
-tokens and the returned terminals are terms: build an atom from a typed word
-with `prolog-atom` and get a terminal's text back with `prolog-atom-text` (see
-[Atoms](#atoms)). `nonterminal` is a term such as `(read-prolog-term "git")` or
-`(read-prolog-term "opts([])")`. The grammar can be written with `-->` or
-`def-dcg-rule`.
-
-`(map-phrase-next-terminals function rulebase nonterminal prefix &key ...)`
-takes the same arguments, calls `function` with `(:terminal term)`,
-`(:any nil)` or `(:end nil)` as each distinct item is found, and returns
-`nil`. A condition that `function` does not handle stops the search and is
-signalled again from `map-phrase-next-terminals`, outside the grammar.
+`nonterminal` is a term such as `(read-prolog-term "git")` or
+`(read-prolog-term "opts([])")`. `prefix` must be a proper list of tokens,
+otherwise `type-error` is signalled. Tokens and returned terminals are terms:
+build an atom from a typed word with `prolog-atom` and get a terminal's text
+back with `prolog-atom-text` (see [Atoms](#atoms)).
 
 ```lisp
 (defparameter *git*
@@ -740,55 +732,95 @@ git_branch(dev)."))
 (phrase-next-terminals *git* (read-prolog-term "git")
                        (read-prolog-term "[git, checkout]"))
 ;; terminals: the atoms main and dev; any-p NIL; end-p NIL
+(phrase-token-valid-p *git* (read-prolog-term "git")
+                      (read-prolog-term "[git, checkout]")
+                      (read-prolog-term "feature"))
+;; NIL: no input that starts with git checkout feature is a phrase
 ```
 
+#### What the results promise
+
+For a ground `prefix`, a ground token `t` and limits that are not reached:
+
+- Completeness. If `phrase(nonterminal, prefix ++ [t|S])` succeeds for some
+  `S`, then `any-p` is true or `t` is an instance of a returned terminal.
+- `end-p` is exactly whether `phrase(nonterminal, prefix)` succeeds.
+- A returned ground terminal is viable: the derivation of `prefix ++ [t|R]`
+  does not fail before it reads or tests `R`, or succeeds. Whether some
+  continuation completes the phrase is undecidable in general and is not
+  claimed.
+- A returned terminal with variables, such as `f(_)`, means that some instance
+  may be valid. `any-p` means the candidates could not be enumerated, for
+  example because the next token is checked by a foreign predicate or by a
+  generator without end. Neither may be used to decide that a typed token is
+  invalid; use `phrase-token-valid-p` for that.
+- `phrase-token-valid-p` returns `nil` only when no input that starts with
+  `prefix ++ [token]` is a phrase. It returns true when the derivation of
+  `prefix ++ [token|R]` reads or tests `R`, or succeeds, which does not promise
+  that a phrase exists.
+
+#### How the candidates are found
+
 The grammar runs through the ordinary prover on `prefix` followed by an
-unbound tail, so it behaves as in `phrase/2`. When a derivation reads the next
-token `T` from the tail, it keeps running until it asks for the token after
-`T` or reaches the end of the phrase, and only then reports `T`. Guards placed
-after the terminal therefore still apply: a guard can reject `T`, and a guard
-that binds a variable terminal, such as `git_branch(B)` above, reports each
-value it binds.
+unbound tail, in two stages that share one inference budget and deadline.
 
-A derivation reports `T` early, without checking the rest of the clause, at
-the first of these. If `T` is still unbound, it sets `any-p`.
+Stage 1 classifies every goal it reaches. User predicates and builtins that
+only bind variables (`=`, `call/N`, conjunction, disjunction, `true`, `fail`,
+`member/2`, `append/3`, `between/3`, `length/2`, `select/3`, `phrase/2,3` and
+the `def-dcg-rule` matchers `dcg-token-match`, `dcg-token-match-value`,
+`dcg-alt` and `dcg-opt`) run normally. Any other builtin or foreign predicate
+whose arguments share a variable with the unread input or the token being
+read does not run: the branch reports that token, or `any-p` before any read,
+and stops. A branch that reads the next token as `[T|Rest]` keeps running,
+so a guard after the terminal can reject `T` or bind a variable `T`, until it
+reads `Rest` or succeeds; it then reports `T` and stops. A branch also stops
+after 250 goals past the read and reports `T` as it was read.
 
-- A cut, including one inside a predicate that a guard calls. The cut does
-  not run: it would commit to choices made for `T` alone, so another next
-  token could no longer take the alternatives it prunes.
-- An answer for a table begun before `T` was read. Tables include predicates
-  declared with `table/1` and those the engine tables on its own for left
-  recursion. That includes any `-->` nonterminal that calls itself right after
-  a terminal, such as `commit_opts` above, because the left-recursion analysis
-  does not count terminals as calls.
-- An instantiation error raised by the derivation. An error from a query
-  nested in the derivation, such as one a foreign predicate runs, reaches the
-  caller instead.
+`\+`, `once/1`, `->`, `*->`, if-then-else, `forall/2` and `ignore/1` run in
+a scope. When the goal inside binds the unread input or the token, the
+outermost such construct runs again in a weaker form that can only add
+results: `\+ G` and `forall/2` succeed, `once(G)` becomes `G`, and
+`(C -> T ; E)` becomes `(C, T ; E)`. A cut after the read, or after such a
+weakening, is skipped, since it would prune alternatives that another next
+token takes.
 
-The query runs under the limits of
+Stage 2 checks each ground candidate of stage 1 with `phrase-token-valid-p`
+before it is returned. `end-p` comes from running `phrase/2` on `prefix`.
+
+Each call uses its own table session, so tables built while probing are not
+reused by later queries.
+
+#### Limits
+
+The stages run under the limits of
 [Inference budget and deadline](#inference-budget-and-deadline), with the
 options above and the specials `*max-prolog-depth*`,
 `*max-prolog-inferences*` and `*prolog-deadline*`. Reaching a limit signals
-`prolog-inference-limit-exceeded` or `prolog-deadline-exceeded`, so
-`phrase-next-terminals` does not return. `map-phrase-next-terminals` has
-already called `function` for every item found before the limit, so a caller
-that needs partial results collects them there. Each call uses its own table
-session, so tables built for one call are not reused by later queries.
+`prolog-inference-limit-exceeded` or `prolog-deadline-exceeded`, and no
+completeness is claimed. `map-phrase-next-terminals` has already called
+`function` for every item found before the limit, so a caller that needs
+partial results collects them there. `end-p` is computed last, after the
+candidates. A condition that `function` does not handle is signalled again
+from `map-phrase-next-terminals`, outside the grammar.
 
-Limitations:
+#### Writing grammars for completion
 
-- The result can include terminals no complete input accepts. Guards after a
-  cut or a tabled nonterminal that ends the check are not run, and a terminal
-  read inside `\+` is reported. Put a guard that excludes an option, such as a
-  mutually exclusive flag, directly after the terminal, and write it without
-  a cut.
-- Builtins such as `append/3` or `length/2` that bind the input list are not
-  seen when they bind it. The binding is noticed at the next clause-head or
-  `=/2` unification, or at the end of the phrase. A builtin that enumerates
-  open lists can keep running until a limit stops it, and limits are off by
-  default.
-- `dcg-error-recovery` raises an instantiation error on the unread tail. Raised
-  before any token is read, it reaches the caller.
+- Express mutually exclusive options as guards on a parse-state argument,
+  and put guards on the token after the goal that generates it:
+  `{flag(F), \+ memberchk(F, Seen)}`.
+- A generator that supplies the next token, such as `git_branch(B)`, must be
+  Prolog clauses. A foreign predicate in that position is not run, so the
+  result is `any-p`.
+- Keep grammars free of side effects (`assert`, I/O, global variables):
+  stage 1 runs branches that no concrete input would run.
+- Write lookahead as a stream predicate, `not_x(S, S) :- \+ S = [x|_].`
+  `\+ [x]` in a DCG body is not translated to a lookahead, and push-back is
+  not implemented.
+- Pass ground atoms as tokens, and always pass a deadline.
+
+`dcg-star`, `dcg-plus` and `dcg-error-recovery` are not among the builtins
+that run on the unread input, so a `def-dcg-rule` grammar that applies them
+there yields `any-p`.
 
 ## Conditions
 

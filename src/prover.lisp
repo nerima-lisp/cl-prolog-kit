@@ -8,7 +8,7 @@
 (in-package #:cl-prolog-kit)
 
 (declaim (ftype function %proper-list-p %prove-goal/k %prove-clauses/k %prove-rule/k
-                         %phrase-probe-end-phase))
+                         %phrase-probe-dispatch/k))
 
 (defmacro %with-propagated-bindings
     ((propagated propagated-index extended extended-index) &body body)
@@ -141,15 +141,8 @@ Return (VALUES NORMALIZED-GOAL EXPLICIT-MODULE)."
 (progn
   (defun %prove-cut-goal/k (state succeed)
     "Succeed once, then prune this predicate invocation's alternatives."
-    (let ((phase *phrase-probe-phase*))
-      (if phase
-          ;; Any cut run after the probe read the open tail commits to
-          ;; choices made for that one token, even inside a guard's own
-          ;; predicate, and would prune alternatives another token takes.
-          (%phrase-probe-end-phase phase (proof-state-environment-index state))
-          (progn
-            (funcall succeed state)
-            (cl:throw (proof-state-cut-tag state) t)))))
+    (funcall succeed state)
+    (cl:throw (proof-state-cut-tag state) t))
 
   (defun %prove-static-goal/k
       (solver normalized-goal explicit-module state succeed)
@@ -203,23 +196,34 @@ Return (VALUES NORMALIZED-GOAL EXPLICIT-MODULE)."
                    "the invoked predicate is not defined"))
                 nil)))))
 
+  (defun %prove-resolved-goal/k
+      (normalized-goal explicit-module solver state succeed)
+    "Prove a goal %RESOLVE-DISPATCH-TARGET has already resolved."
+    (cond
+      ((and (eq (first normalized-goal) (quote !))
+            (null (rest normalized-goal)))
+       (%prove-cut-goal/k state succeed))
+      (solver
+       (%prove-static-goal/k
+        solver normalized-goal explicit-module state succeed))
+      (t
+       (%prove-user-goal/k
+        normalized-goal explicit-module state (proof-state-bindings state)
+        +call-context-atom+ succeed))))
+
   (defun %prove-goal-dispatch/k (goal state succeed)
     "Prove GOAL from STATE after any active depth-limit accounting."
-    (let* ((*current-table-session* (proof-state-table-session state))
-           (environment (proof-state-bindings state))
-           (context +call-context-atom+))
+    (let ((*current-table-session* (proof-state-table-session state)))
       (multiple-value-bind (normalized-goal explicit-module solver)
-          (%resolve-dispatch-target goal state environment context)
-        (cond
-          ((and (eq (first normalized-goal) (quote !))
-                (null (rest normalized-goal)))
-           (%prove-cut-goal/k state succeed))
-          (solver
-           (%prove-static-goal/k
-            solver normalized-goal explicit-module state succeed))
-          (t
-           (%prove-user-goal/k
-            normalized-goal explicit-module state environment context succeed)))))))
+          (%resolve-dispatch-target goal state (proof-state-bindings state)
+                                    +call-context-atom+)
+        ;; The one place every goal passes, so the PHRASE-NEXT-TERMINALS
+        ;; probe classifies each goal here; see dcg-next-terminals.lisp.
+        (if *phrase-probe*
+            (%phrase-probe-dispatch/k normalized-goal explicit-module solver
+                                      state succeed)
+            (%prove-resolved-goal/k normalized-goal explicit-module solver
+                                    state succeed))))))
 
 (defun %prove-goal/k (goal state succeed)
   "Prove GOAL, counting every dispatched call for inference and local depth
