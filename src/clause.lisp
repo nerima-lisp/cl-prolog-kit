@@ -161,21 +161,27 @@
 (defun %materialize-clause-template-body (template context) (%materialize-clause-template-reference (%clause-template-body template) context))
 (defun %materialize-clause-template (template) "Instantiate TEMPLATE with fresh variables and lazily allocated cons shells." (let ((context (%make-clause-template-materialization-context template))) (make-clause (%materialize-clause-template-head template context) (%materialize-clause-template-body template context))))
 
-(defun %copy-clause (clause)
-  "Copy CLAUSE's cons graph while preserving atoms, sharing, and cycles."
+(defun %copy-clause (clause &optional copy-strings-p)
+  "Copy CLAUSE's cons graph while preserving atoms, sharing, and cycles.
+When COPY-STRINGS-P is true, strings are copied as well, so a caller mutating
+its own string cannot change the copy."
   (let ((copies (make-hash-table :test #'eq)))
     (labels ((copy-term (term)
-               (if (consp term)
-                   (multiple-value-bind (copy present-p)
-                       (gethash term copies)
-                     (if present-p
-                         copy
-                         (let ((copy (cons nil nil)))
-                           (setf (gethash term copies) copy
-                                 (car copy) (copy-term (car term))
-                                 (cdr copy) (copy-term (cdr term)))
-                           copy)))
-                   term)))
+               (cond
+                 ((consp term)
+                  (multiple-value-bind (copy present-p)
+                      (gethash term copies)
+                    (if present-p
+                        copy
+                        (let ((copy (cons nil nil)))
+                          (setf (gethash term copies) copy
+                                (car copy) (copy-term (car term))
+                                (cdr copy) (copy-term (cdr term)))
+                          copy))))
+                 ((and copy-strings-p (stringp term))
+                  (or (gethash term copies)
+                      (setf (gethash term copies) (copy-seq term))))
+                 (t term))))
       (make-clause (copy-term (clause-head clause))
                    (copy-term (clause-body clause))))))
 
@@ -193,9 +199,11 @@
 
 (defun %make-owned-stored-clause
     (clause module born-revision &optional source)
-  "Snapshot CLAUSE and compile its immutable instantiation template once."
-  (let ((template (%compile-clause-template clause)))
-    (%make-stored-clause (%copy-clause clause) template
+  "Snapshot CLAUSE and compile its immutable instantiation template once.
+Strings are snapshotted too because the first-argument string index keys on
+their contents."
+  (let ((owned (%copy-clause clause t)))
+    (%make-stored-clause owned (%compile-clause-template owned)
                          module born-revision source)))
 
 (defun %materialize-stored-clause-for-proof (entry template)

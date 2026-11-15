@@ -243,7 +243,7 @@
     (is-equal (quote (nil))
               (query-prolog rulebase (quote (dispatch alpha extra))))))
 
-(deftest predicate-index-bound-cyclic-root-keeps-full-snapshot-order ()
+(deftest predicate-index-bound-cyclic-root-keeps-a-stable-snapshot ()
   (let* ((cycle (list (quote root)))
          (environment (list (cons (quote ?value) cycle)))
          (rulebase
@@ -270,11 +270,14 @@
     (let ((snapshot
             (cl-prolog-kit::%proof-predicate-entries
              (quote (cyclic-index ?value)) state)))
-      (is (eq entries snapshot))
+      ;; No clause has a compound first argument, so the cyclic goal selects
+      ;; only the variable clause without walking its spine.
+      (is (eq (cl-prolog-kit::%predicate-descriptor-compound-fallback-entries
+               descriptor)
+              snapshot))
+      (is-equal 3 (length entries))
       (is-equal
-       (quote ((cyclic-index first)
-               (cyclic-index ?item)
-               (cyclic-index last)))
+       (quote ((cyclic-index ?item)))
        (stored-clause-heads snapshot))
       (setf (car cycle) (quote changed))
       (is (eq snapshot
@@ -828,7 +831,10 @@
       (cl-prolog-kit::%predicate-descriptor-first-argument-entries
        descriptor 99)))))
 
-(deftest predicate-descriptor-leaves-mutable-compound-and-cyclic-terms-unindexed ()
+(deftest predicate-descriptor-index-survives-caller-mutation ()
+  ;; Strings and compounds are indexed by content, so the rulebase owns its
+  ;; copy of both: mutating the caller's objects after insertion changes
+  ;; neither the stored clause nor the candidates a goal selects.
   (let* ((string (copy-seq "string"))
          (bits (copy-seq #*101))
          (compound (list (quote compound) (quote value)))
@@ -846,26 +852,43 @@
               rulebase cl-prolog-kit::+default-prolog-module+
               (quote unindexed) 2))
            (entries (cl-prolog-kit::%predicate-descriptor-entries descriptor)))
-      (is (zerop
-           (hash-table-count
-            (cl-prolog-kit::%predicate-descriptor-symbol-first-argument-index
-             descriptor))))
-      (is (zerop
-           (hash-table-count
-            (cl-prolog-kit::%predicate-descriptor-atom-first-argument-index
-             descriptor))))
-      (dolist (first-argument (list string bits compound cycle))
-        (is (eq entries
-                (cl-prolog-kit::%predicate-descriptor-first-argument-entries
-                 descriptor first-argument))))
-      (setf (char string 0) #\X
-            (aref bits 0) 0
-            (car compound) (quote changed)
-            (car cycle) (quote changed))
-      (dolist (first-argument (list string bits compound cycle))
-        (is (eq entries
-                (cl-prolog-kit::%predicate-descriptor-first-argument-entries
-                 descriptor first-argument)))))))
+      (destructuring-bind (string-entry bits-entry compound-entry cycle-entry)
+          entries
+        (declare (ignore bits-entry))
+        ;; Entry lists are compared with IS so that a failure report never
+        ;; prints the circular clause.
+        (flet ((candidates (first-argument)
+                 (cl-prolog-kit::%predicate-descriptor-first-argument-entries
+                  descriptor first-argument)))
+          (is (zerop
+               (hash-table-count
+                (cl-prolog-kit::%predicate-descriptor-symbol-first-argument-index
+                 descriptor))))
+          (is (zerop
+               (hash-table-count
+                (cl-prolog-kit::%predicate-descriptor-atom-first-argument-index
+                 descriptor))))
+          (is (equal (list string-entry) (candidates string)))
+          (is (eq entries (candidates bits)))
+          ;; A cyclic clause argument is not a proper compound, so it stays
+          ;; among the candidates of every compound goal.
+          (is (equal (list compound-entry cycle-entry) (candidates compound)))
+          (is (equal (list cycle-entry) (candidates cycle)))
+          (setf (char string 0) #\X
+                (aref bits 0) 0
+                (car compound) (quote changed)
+                (car cycle) (quote changed))
+          (is-equal "string"
+                    (second (clause-head
+                             (cl-prolog-kit::%stored-clause-clause string-entry))))
+          (is-equal (quote (compound value))
+                    (second (clause-head
+                             (cl-prolog-kit::%stored-clause-clause compound-entry))))
+          (is (null (candidates string)))
+          (is (equal (list string-entry) (candidates (copy-seq "string"))))
+          (is (eq entries (candidates bits)))
+          (is (equal (list cycle-entry) (candidates compound)))
+          (is (equal (list cycle-entry) (candidates cycle))))))))
 
 (deftest predicate-descriptors-rebuild-on-copy-and-same-revision-replace ()
   (let* ((source
