@@ -19,11 +19,17 @@
 
 One inference is one goal dispatch, one solution produced by a builtin or
 foreign predicate, or one candidate examined by a builtin that searches.  A
-query that needs more raises PROLOG-INFERENCE-LIMIT-EXCEEDED.")
+query that needs more raises PROLOG-INFERENCE-LIMIT-EXCEEDED.  Cleanup goals
+together run at most 1000 inferences past it.  A query nested inside another
+is charged to the outermost one, and its own budget can only lower the
+enclosing one.")
 
 (defparameter *prolog-deadline* nil
   "Default absolute GET-INTERNAL-REAL-TIME deadline of a top-level query, or
-NIL for none.  See PROLOG-DEADLINE-AFTER.")
+NIL for none.  A query still running at it raises PROLOG-DEADLINE-EXCEEDED.
+Cleanup goals together run at most 500 ms past it.  A query nested inside
+another cannot have a later deadline than the enclosing one.  See
+PROLOG-DEADLINE-AFTER.")
 
 (defparameter *max-prolog-builtin-output-length* 1048576
   "Maximum number of characters or list elements a single builtin call may

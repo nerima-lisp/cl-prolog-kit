@@ -319,36 +319,57 @@ around the call:
   (consult-prolog text rulebase))
 ```
 
-A foreign predicate can start another top-level query while one is running.
-If that nested query passes neither `:max-inferences` nor `:deadline` (or
-passes `nil` for both), it shares the enclosing query's remaining budget and
-deadline, so the enclosing limits still bound the whole computation. If it
-passes a non-`nil` value for either option, it runs under its own inference
-budget (the passed value, or `*max-prolog-inferences*`), and its inferences
-are not charged to the enclosing query. Its deadline is the earlier of the
-enclosing query's deadline and its own (the passed value, or
-`*prolog-deadline*`), so a nested query never outlives the enclosing
-deadline.
+One root query uses at most L + 1000 inferences and stops by D + 500 ms, where
+L and D are the root's inference limit and deadline, and 1000 inferences and
+500 ms are the cleanup allowance described below. The root is the outermost
+query running in a thread. The bound covers every query nested inside it,
+and holds whether a stop unwinds to the host, is replaced by a ball that a
+cleanup throws and `catch/3` catches, or is handled by host code that carries
+on. When the root has no limit or no deadline, the same bound holds for each
+nested query that sets one, with its own limit or deadline as L or D. Like
+the deadline itself, D + 500 ms can be overrun by a single long-running
+builtin call.
 
-Both conditions are `prolog-resource-error` subclasses, but Prolog `catch/3`
-does not intercept them, so a goal cannot catch its way past its own budget.
-The stack still unwinds normally: `setup_call_cleanup/3` and `call_cleanup/2`
-run their cleanup goal. The exhausted budget would stop a cleanup at its first
-goal, so once a query has stopped, its cleanups run on a separate allowance of
-1000 inferences. The allowance is shared: every cleanup of that query,
-including cleanups nested inside other cleanups, draws on the same 1000, so a
-cleanup cannot obtain a new allowance by starting another
-`setup_call_cleanup/3`. When a nested query started by a foreign predicate
-stops on its own limit, the stop unwinds through the enclosing queries as
-well, so their cleanups also run on the allowance; there is one allowance for
-the outermost query and every query nested inside it, however deep. A query
-that a cleanup starts while running on the allowance is charged to it: it
-may use at most what the allowance has left, its own `:max-inferences` can
-only lower that, and the inferences it uses are taken from the allowance.
-The allowance also has a deadline 500 ms after the query stopped (after the
-query's deadline, when the deadline is what stopped it), checked at every
-inference. A cleanup that exhausts the allowance raises the same two
-conditions.
+A foreign predicate can start a nested query (another `query-prolog` or
+similar call) while one is running. Its inferences are charged to the root's
+count. If it passes neither `:max-inferences` nor `:deadline` (or passes
+`nil` for both), it runs under the enclosing limit and deadline, or under
+`*max-prolog-inferences*` and `*prolog-deadline*` when no enclosing query has
+either. Otherwise its own limit (the passed value, or
+`*max-prolog-inferences*`) counts from the inferences already used when it
+starts, its own deadline is the passed value or `*prolog-deadline*`, and each
+applies only where it is tighter than the enclosing one. Passing `nil` does
+not turn the enclosing limit or deadline off.
+
+`prolog-inference-limit-exceeded` and `prolog-deadline-exceeded` are
+`prolog-resource-error` subclasses, but Prolog `catch/3` does not intercept
+them, so a goal cannot catch its way past its own budget. The stack still
+unwinds normally: `setup_call_cleanup/3` and `call_cleanup/2` run their
+cleanup goal. A cleanup goal may run 1000 inferences past the limit in force
+when it starts and 500 ms past the deadline, whether it runs after a stop, a
+throw, a failure, or a success, so a stopped query can still release what it
+holds. Cleanups nested inside other cleanups, and queries that cleanups
+start, do not add to this: together they stay within 1000 inferences past
+the limit of the innermost query that set one, and within 500 ms past its
+deadline. A cleanup checks the deadline at every inference. A cleanup that
+exhausts its allowance raises the same two conditions, and
+`prolog-inference-limit-exceeded-limit` then returns 1000, even when an
+enclosing cleanup had already used part of the allowance.
+
+A stop does not stay caught. When host code handles the condition and
+continues, or `catch/3` catches a ball that a cleanup threw in place of the
+stop, the next inference charged under the exhausted limit stops again. A
+cleanup that runs after such a catch still gets its allowance, so this path
+too can reach L + 1000 inferences, and no more.
+
+The bound does not cover host code that binds the engine's unexported limit
+variables itself, or a query started in another thread, which is a root of
+its own. Binding `*max-prolog-inferences*` or `*prolog-deadline*` inside a
+foreign predicate is covered: it only sets the defaults of nested queries.
+Under a root without a deadline, only the 1000-inference allowance bounds how
+long a cleanup runs, so a cleanup whose few inferences are each expensive can
+run for a long time; under a root with neither limit nor deadline, nothing
+bounds a cleanup.
 
 ## Capability Policy
 
