@@ -286,9 +286,7 @@ builtins and the predicates CONSULT-PROLOG defined."
   (consult-prolog "lp :- repeat, fail.
 c :- setup_call_cleanup(true, lp, c).
 nest(0) :- lp.
-nest(N) :- N1 is N - 1, setup_call_cleanup(true, nest(N1), (assertz(ran), lp)).
-heavy :- between(1, 1000000, _), numlist(1, 100000, _), fail.
-heavy."
+nest(N) :- N1 is N - 1, setup_call_cleanup(true, nest(N1), (assertz(ran), lp))."
                   (make-rulebase)))
 
 (deftest recursive-cleanup-cannot-mint-new-allowances ()
@@ -308,22 +306,45 @@ heavy."
       ;; first goal, before its assertz/1.
       (is-equal 1 (length (limits-test-query rulebase "ran."))))))
 
-(defun limits-test-ms-since (start)
-  (round (* 1000 (- (get-internal-real-time) start))
-         internal-time-units-per-second))
+(defvar *limits-test-calls* 0
+  "LIMITS-TEST-NOTE-CALL calls made.")
+
+(defvar *limits-test-late-calls* 0
+  "LIMITS-TEST-NOTE-CALL calls made once the effective deadline had passed.")
+
+(define-foreign-predicate (limits-test-note-call) (rulebase environment depth emit)
+  (declare (cl:ignore rulebase depth))
+  (incf *limits-test-calls*)
+  (when (>= (get-internal-real-time) cl-prolog-kit::*inference-deadline*)
+    (incf *limits-test-late-calls*))
+  (funcall emit environment))
 
 (deftest cleanup-allowance-has-a-deadline ()
   ;; The query trips its inference budget; the cleanup's few inferences are
   ;; each expensive, so only the grace period past the query's deadline
-  ;; stops it in time.  A root without a deadline bounds its cleanups by the
+  ;; stops it.  The stop reports D + G, the deadline the cleanup ran under,
+  ;; and comes at the first charge after it: no expensive call starts once
+  ;; it has passed.  A root without a deadline bounds its cleanups by the
   ;; allowance alone.
-  (let ((start (get-internal-real-time)))
-    (is (limits-test-condition (prolog-deadline-exceeded)
-          (limits-test-query (limits-test-cleanup-rules)
-                             "setup_call_cleanup(true, lp, heavy)."
-                             :max-inferences 1000
-                             :deadline (prolog-deadline-after 1/10))))
-    (is (< (limits-test-ms-since start) 900))))
+  (let* ((*limits-test-calls* 0)
+         (*limits-test-late-calls* 0)
+         (deadline (prolog-deadline-after 1/10))
+         (condition (limits-test-condition (prolog-deadline-exceeded)
+                      (query-prolog (make-rulebase)
+                                    '(setup_call_cleanup
+                                      true (and (repeat) (fail))
+                                      (and (cl-prolog-kit::between 1 1000000 ?i)
+                                           (cl-prolog-kit::numlist 1 100000 ?l)
+                                           (limits-test-note-call)
+                                           (fail)))
+                                    :max-inferences 1000
+                                    :deadline deadline))))
+    (is condition)
+    (when condition
+      (is-equal (+ deadline cl-prolog-kit::*inference-limit-cleanup-grace*)
+                (prolog-deadline-exceeded-deadline condition)))
+    (is (plusp *limits-test-calls*))
+    (is (<= *limits-test-late-calls* 1))))
 
 (define-foreign-predicate (limits-test-nested-loop budget)
     (rulebase environment depth emit)
@@ -838,14 +859,19 @@ innermost records its deadline and loops."
 (deftest recursive-cleanup-under-a-root-without-a-limit-stops ()
   ;; c :- setup_call_cleanup(true, lp, c) raises the cap at every cleanup.
   ;; The root has no inference limit, so only the nested query's own
-  ;; ceiling, 10 + R, stops the recursion before it exhausts the stack.
-  (let ((start (get-internal-real-time)))
-    (is (limits-test-condition (prolog-inference-limit-exceeded)
-          (query-prolog (limits-test-cleanup-rules)
-                        '(limits-test-recursive-cleanup-with-own-limit)
-                        :max-inferences nil
-                        :deadline (prolog-deadline-after 1/2))))
-    (is (< (limits-test-ms-since start) 500))))
+  ;; ceiling, 10 + R, stops the recursion.  Without it the recursion ends
+  ;; in control stack exhaustion or at the deadline, neither of which is an
+  ;; inference stop; the stop reports the cleanup allowance, the limit of
+  ;; the cleanup that hit the ceiling.
+  (let ((condition (limits-test-condition (prolog-inference-limit-exceeded)
+                     (query-prolog (limits-test-cleanup-rules)
+                                   '(limits-test-recursive-cleanup-with-own-limit)
+                                   :max-inferences nil
+                                   :deadline (prolog-deadline-after 1/2)))))
+    (is condition)
+    (when condition
+      (is-equal cl-prolog-kit::*inference-limit-cleanup-allowance*
+                (prolog-inference-limit-exceeded-limit condition)))))
 
 (define-foreign-predicate (limits-test-sleep milliseconds) (rulebase environment depth emit)
   (declare (cl:ignore rulebase depth))
@@ -891,3 +917,41 @@ innermost records its deadline and loops."
     (is (<= (limits-test-count rulebase 'tick)
             (floor cl-prolog-kit::+inference-deadline-max-poll-interval+
                    +limits-test-tick-cost+)))))
+
+(defvar *limits-test-slow-run-deadline* nil
+  "Deadline LIMITS-TEST-SLOW-RUN gave its nested query.")
+
+(define-foreign-predicate (limits-test-slow-run) (rulebase environment depth emit)
+  (declare (cl:ignore depth))
+  ;; The deadline starts with the slow calls, so at least one starts before
+  ;; it however long the cheap inferences before took.
+  (setf *limits-test-slow-run-deadline* (prolog-deadline-after 1/20))
+  (query-prolog rulebase '(and (cl-prolog-kit::between 1 256 ?j)
+                               (limits-test-note-call)
+                               (cl-prolog-kit::numlist 1 100000 ?l)
+                               (fail))
+                :deadline *limits-test-slow-run-deadline*)
+  (funcall emit environment))
+
+(deftest slow-builtins-after-cheap-inferences-stop-at-the-deadline ()
+  ;; Cheap inferences grow the poll interval to its maximum; the numlist/3
+  ;; calls that follow each take milliseconds.  Each of them makes the next
+  ;; charge read the clock, so no more than one starts after the deadline,
+  ;; instead of the calls of a whole poll interval.
+  (let* ((*limits-test-calls* 0)
+         (*limits-test-late-calls* 0)
+         (*limits-test-slow-run-deadline* nil)
+         (condition (limits-test-condition (prolog-deadline-exceeded)
+                      (query-prolog (make-rulebase)
+                                    '(or (and (cl-prolog-kit::between 1 2000 ?i) (fail))
+                                         (limits-test-slow-run))
+                                    :max-inferences 1000000
+                                    :deadline (prolog-deadline-after 2)))))
+    (is condition)
+    (when condition
+      (is-equal *limits-test-slow-run-deadline*
+                (prolog-deadline-exceeded-deadline condition)))
+    (is (plusp *limits-test-calls*))
+    (is (<= *limits-test-late-calls* 1)
+        (format nil "~D of ~D calls started past the deadline"
+                *limits-test-late-calls* *limits-test-calls*))))
