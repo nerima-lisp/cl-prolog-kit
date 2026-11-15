@@ -300,10 +300,15 @@ source registrations, flags, and character conversions are copied as well."
                                   (position :last)
                                   (module +default-prolog-module+)
                                   source)
-  "Insert CLAUSE at POSITION (:FIRST or :LAST) and return RULEBASE."
-  (let ((entry
-          (%make-owned-stored-clause
-           clause module (%next-rulebase-revision! rulebase) source)))
+  "Insert CLAUSE at POSITION (:FIRST or :LAST) and return RULEBASE.
+CLAUSE is snapshotted and its predicate key computed before RULEBASE changes,
+so a malformed clause signals and leaves RULEBASE untouched."
+  (check-type position (member :first :last))
+  (let* ((entry
+           (%make-owned-stored-clause
+            clause module (1+ (rulebase-revision rulebase)) source))
+         (key (%stored-clause-predicate-key entry)))
+    (%next-rulebase-revision! rulebase)
     (ecase position
       (:first
        (let ((cell (cons entry (rulebase-entries rulebase))))
@@ -317,15 +322,14 @@ source registrations, flags, and character conversions are copied as well."
              (setf (cdr tail) cell)
              (setf (rulebase-entries rulebase) cell))
          (setf (rulebase-entries-tail rulebase) cell))))
-    (let ((key (%stored-clause-predicate-key entry)))
-      (when key
-        (%insert-index-entry!
-         key entry position
-         (rulebase-predicate-index rulebase)
-         (rulebase-predicate-tails rulebase))
-        (destructuring-bind (entry-module predicate arity) key
-          (%invalidate-rulebase-predicate-descriptor!
-           rulebase entry-module predicate arity)))))
+    (when key
+      (%insert-index-entry!
+       key entry position
+       (rulebase-predicate-index rulebase)
+       (rulebase-predicate-tails rulebase))
+      (destructuring-bind (entry-module predicate arity) key
+        (%invalidate-rulebase-predicate-descriptor!
+         rulebase entry-module predicate arity))))
   rulebase)
 
 (defun rulebase-insert-clauses! (rulebase clauses
@@ -343,17 +347,22 @@ leaves RULEBASE and its revision unchanged."
   (check-type position (member :first :last))
   (when (null clauses)
     (return-from rulebase-insert-clauses! rulebase))
-  ;; Snapshot every clause before touching RULEBASE, so a malformed clause
-  ;; leaves it unchanged.
+  ;; Snapshot every clause and compute every predicate key before touching
+  ;; RULEBASE, so a malformed clause signals and leaves it unchanged.
   (let* ((revision (1+ (rulebase-revision rulebase)))
          (entries (mapcar (lambda (clause)
                             (%make-owned-stored-clause
                              clause module revision source))
                           clauses))
+         (keyed-entries (mapcar (lambda (entry)
+                                  (cons entry (%stored-clause-predicate-key entry)))
+                                entries))
          (last-cell (last entries))
          ;; Per-bucket :FIRST insertion runs back to front to keep CLAUSES'
          ;; order; reversed before splicing ENTRIES into the rulebase.
-         (index-order (if (eq position :first) (reverse entries) entries))
+         (index-order (if (eq position :first)
+                          (reverse keyed-entries)
+                          keyed-entries))
          (touched-keys (make-hash-table :test #'equal)))
     (%next-rulebase-revision! rulebase)
     (ecase position
@@ -368,14 +377,13 @@ leaves RULEBASE and its revision unchanged."
              (setf (cdr tail) entries)
              (setf (rulebase-entries rulebase) entries))
          (setf (rulebase-entries-tail rulebase) last-cell))))
-    (dolist (entry index-order)
-      (let ((key (%stored-clause-predicate-key entry)))
-        (when key
-          (%insert-index-entry!
-           key entry position
-           (rulebase-predicate-index rulebase)
-           (rulebase-predicate-tails rulebase))
-          (setf (gethash key touched-keys) t))))
+    (loop for (entry . key) in index-order
+          do (when key
+               (%insert-index-entry!
+                key entry position
+                (rulebase-predicate-index rulebase)
+                (rulebase-predicate-tails rulebase))
+               (setf (gethash key touched-keys) t)))
     (loop for key being the hash-keys of touched-keys
           do (destructuring-bind (entry-module predicate arity) key
                (%invalidate-rulebase-predicate-descriptor!
@@ -464,7 +472,8 @@ CLAUSES may be facts or rules.  The inserted clauses are retracted when
 FUNCTION returns or exits non-locally, and only those clauses: anything
 FUNCTION itself asserts or retracts is left as it is, and an overlay clause
 FUNCTION already retracted is not retracted again.  Returns FUNCTION's
-values."
+values.  When inserting CLAUSES signals, RULEBASE is left unchanged and
+FUNCTION is not called."
   (check-type rulebase rulebase)
   (let ((inserted '()))
     (unwind-protect

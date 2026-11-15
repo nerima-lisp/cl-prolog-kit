@@ -292,6 +292,66 @@
     (is-equal (mapcar #'clause-head visible)
               (mapcar #'clause-head (rulebase-visible-clauses rulebase)))))
 
+;;; A head whose argument list is improper snapshots fine but has no arity, so
+;;; computing its predicate key signals; it must do so before any mutation.
+(defun %improper-head-clause ()
+  (make-clause '(bulk . 42)))
+
+(defun %insert-failure-observation (rulebase)
+  "Return RULEBASE's revision, entry spine, tail, buckets, descriptor and queries."
+  (list (cl-prolog-kit::rulebase-revision rulebase)
+        (copy-list (cl-prolog-kit::rulebase-entries rulebase))
+        (cl-prolog-kit::rulebase-entries-tail rulebase)
+        (%rulebase-observation rulebase)
+        (%candidate-heads (%default-descriptor rulebase 'bulk 2) 'alpha)
+        (%candidate-heads (%default-descriptor rulebase 'bulk 2) '?any)))
+
+(deftest bulk-insert-leaves-rulebase-unchanged-on-an-improper-head ()
+  (dolist (position '(:first :last))
+    (let* ((rulebase (%bulk-base-rulebase))
+           (before (%insert-failure-observation rulebase)))
+      (signals-error
+       (rulebase-insert-clauses! rulebase
+                                 (list (make-clause '(bulk alpha 9))
+                                       (make-clause '(other z))
+                                       (%improper-head-clause))
+                                 :position position))
+      (is-equal before (%insert-failure-observation rulebase))
+      ;; The rulebase still accepts inserts and indexes them normally.
+      (rulebase-insert-clauses! rulebase (list (make-clause '(bulk alpha 9)))
+                                :position position)
+      (is-equal (if (eq position :first)
+                    '(((?n . 9)) ((?n . 0)))
+                    '(((?n . 0)) ((?n . 9))))
+                (query-prolog rulebase '(bulk alpha ?n))))))
+
+(deftest single-insert-leaves-rulebase-unchanged-on-an-improper-head ()
+  (dolist (position '(:first :last))
+    (let* ((rulebase (%bulk-base-rulebase))
+           (before (%insert-failure-observation rulebase)))
+      (signals-error
+       (rulebase-insert-clause! rulebase (%improper-head-clause)
+                                :position position))
+      (is-equal before (%insert-failure-observation rulebase)))))
+
+(deftest overlay-leaves-rulebase-unchanged-when-insertion-fails ()
+  (let* ((rulebase (%bulk-base-rulebase))
+         (before (%insert-failure-observation rulebase))
+         (called nil))
+    (signals-error
+     (call-with-overlay-facts
+      rulebase
+      (list (make-clause '(bulk alpha 9)) (%improper-head-clause))
+      (lambda () (setf called t))))
+    (is (not called))
+    (is-equal before (%insert-failure-observation rulebase))
+    (signals-error
+     (with-overlay-facts (rulebase (list (make-clause '(other z))
+                                         (%improper-head-clause)))
+       (setf called t)))
+    (is (not called))
+    (is-equal before (%insert-failure-observation rulebase))))
+
 (deftest bulk-insert-keeps-the-logical-update-view ()
   (dolist (position '(:first :last))
     (let ((rulebase
