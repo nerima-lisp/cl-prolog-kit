@@ -129,6 +129,10 @@ nr(S, S) :- findall(L, rt(L), _), \\+ rt(S).
 neg_replay --> [x], nr, [_].
 cb(S, S) :- findall(z, S = [a|_], L), L == [].
 coll_bind --> [x], cb, [_].
+cq([a]) :- G.
+cq([b]).
+catch_raise(S, []) :- S = [x|R], catch(cq(R), _, fail).
+catch_ite(S, []) :- S = [x|R], catch(((pair(R, T) = pair([a], 1) ; pair(R, T) = pair([b], true)) -> T ; fail), _, fail).
 :- table(tw/2).
 tw --> [a], tw.
 tw --> [b]."
@@ -150,7 +154,7 @@ token.")
     ("expr" "[1]") ("as" "[a]") ("nb" "[]") ("gen_after_foreign" "[]")
     ("gen_before_foreign" "[]") ("look_after" "[]") ("peek" "[]") ("tw" "[]")
     ("tw" "[a]") ("replay_cut" "[]") ("neg_bind" "[]") ("neg_replay" "[]")
-    ("coll_bind" "[]"))
+    ("coll_bind" "[]") ("catch_raise" "[]") ("catch_ite" "[]"))
   "(NONTERMINAL PREFIX) pairs over the corpus, as Prolog text.")
 
 (defun token-check-corpus-cases ()
@@ -242,6 +246,10 @@ sv_copy(S, S) :- copy_term(S, C), C \\= [x|_].
 sv_foreign(S, S) :- nt_stream_ok(S).
 :- table(tq/1).
 tq([x]).
+m_catch_rest --> [w], ck, [y].
+ck(S, S) :- catch(ckq(S), _, fail).
+ckq([x|_]) :- G.
+ckq([y|_]).
 m_replay_rest --> [w], rq, [y].
 rq(S, S) :- findall(L, tq(L), _), \\+ tq(S).
 m_replay_cut(S, []) :- findall(L, tq(L), _), S = [w|T], tq(T), !, fail.
@@ -284,7 +292,7 @@ relaxed_cut --> ( not_x -> { true } ; [x] ), !, [y].
                         (append (loop for name in *token-check-construct-names*
                                       append (loop for position in '("state" "stream" "token" "rest")
                                                    collect (format nil "m_~A_~A" name position)))
-                                '("nest" "relaxed_cut" "m_replay_rest" "m_replay_cut"))
+                                '("nest" "relaxed_cut" "m_replay_rest" "m_replay_cut" "m_catch_rest"))
                       append (loop for prefix in '("[]" "[w]")
                                    collect (list (read-prolog-term nonterminal)
                                                  (read-prolog-term prefix))))))
@@ -499,6 +507,27 @@ nt(S, S) :- findall(L, t(L), _), \\+ t(S).
 g --> [x], nt, [_]."
                     "fc(S, S) :- findall(z, S = [a|_], L), L == [].
 g --> [x], fc, [_]."))
+    (let ((rulebase (consult-prolog source))
+          (g (read-prolog-term "g")))
+      (is-equal (list source t)
+                (list source (nth-value 1 (query-prolog-first
+                                           rulebase (read-prolog-term "phrase(g, [x, b])")))))
+      (is-equal (list source t)
+                (list source (phrase-token-valid-p rulebase g '() (read-prolog-term "x"))))
+      (is-equal (list source (list (read-prolog-term "x")))
+                (list source (phrase-filter-candidates rulebase g '()
+                                                       (list (read-prolog-term "x"))))))))
+
+(deftest token-check-accepts-tails-bound-before-a-caught-exception ()
+  ;; catch/3 restores the environment from before its goal when the goal
+  ;; raises, so a binding of the open tail followed by an exception (an
+  ;; unbound goal to call, a non-callable then branch) would be lost and the
+  ;; recovery would fail.  phrase/2 accepts x b for each grammar.
+  (dolist (source '("q([a]) :- G.
+q([b]).
+g(S, []) :- S = [x|R], catch(q(R), _, fail)."
+                    "g(S, []) :- S = [x|R], catch(((pair(R, T) = pair([a], 1) ; pair(R, T) = pair([b], true)) -> T ; fail), _, fail)."
+                    "g(S, []) :- S = [x|R], catch(((pair(R, T) = pair([a], 1) ; pair(R, T) = pair([b], true)) *-> T ; fail), _, fail)."))
     (let ((rulebase (consult-prolog source))
           (g (read-prolog-term "g")))
       (is-equal (list source t)

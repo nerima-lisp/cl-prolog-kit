@@ -12,9 +12,9 @@
 ;;;; run as usual: whatever binds R inside them is seen at the next dispatch
 ;;;; or at the solution.  Any other builtin or foreign predicate whose
 ;;;; arguments reach R is not run, and the check accepts.  That includes the
-;;;; constructs that prove a goal and then drop its bindings (\+, forall/2,
-;;;; findall/3): they decide their result after R is bound without
-;;;; dispatching anything more.  Builtins are recognized by their solver, so
+;;;; constructs that may prove a goal and then drop its bindings (\+,
+;;;; forall/2, findall/3, catch/3 on an exception): they decide their result
+;;;; after R is bound without dispatching anything more.  Builtins are recognized by their solver, so
 ;;;; a foreign predicate that shares a builtin's name is not taken for it.
 
 (in-package #:cl-prolog-kit)
@@ -45,10 +45,11 @@ of a concrete input.")
 
 (defparameter *phrase-probe-control-solvers*
   (%phrase-probe-solvers
-   '("once(a)" "ignore(a)" "(a -> b)" "(a -> b ; c)" "(a *-> b)" "(a *-> b ; c)"
-     "catch(a, b, c)"))
+   '("once(a)" "ignore(a)" "(a -> b)" "(a -> b ; c)" "(a *-> b)" "(a *-> b ; c)"))
   "Solvers of control constructs that pass their inner goal's bindings on to
-the continuation, so a binding of R inside them reaches the next dispatch.")
+the continuation on every path, so a binding of R inside them reaches the
+next dispatch.  catch/3 is not one: its recovery restores the environment
+from before its goal, so a binding of R followed by an exception is lost.")
 
 (defstruct (%phrase-probe (:constructor %make-phrase-probe (tail accept-tag)))
   "The open tail one token check watches and where it throws on acceptance."
@@ -76,10 +77,14 @@ dispatch."
   "True when VARIABLE, an unbound input stream, is the checked token's tail."
   (eq variable (%walk-term (%phrase-probe-tail *phrase-probe*) environment)))
 
+(defun %phrase-probe-check-tail (state)
+  "Accept when the tail is bound in STATE.  Called before a goal is resolved,
+so a goal that cannot be resolved does not raise once the token is past."
+  (when (%phrase-probe-tail-bound-p (proof-state-bindings state))
+    (%phrase-probe-accept)))
+
 (defun %phrase-probe-dispatch/k (goal explicit-module solver state succeed)
   "Prove GOAL, resolved by %RESOLVE-DISPATCH-TARGET, under a token check."
-  (when (%phrase-probe-tail-bound-p (proof-state-bindings state))
-    (%phrase-probe-accept))
   (cond
     ((or (null solver)
          (member solver *phrase-probe-monotonic-solvers* :test #'eq)

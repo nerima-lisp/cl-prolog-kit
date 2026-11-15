@@ -8,7 +8,7 @@
 (in-package #:cl-prolog-kit)
 
 (declaim (ftype function %proper-list-p %prove-goal/k %prove-clauses/k %prove-rule/k
-                         %phrase-probe-dispatch/k))
+                         %phrase-probe-check-tail %phrase-probe-dispatch/k))
 
 (defmacro %with-propagated-bindings
     ((propagated propagated-index extended extended-index) &body body)
@@ -214,11 +214,13 @@ Return (VALUES NORMALIZED-GOAL EXPLICIT-MODULE)."
   (defun %prove-goal-dispatch/k (goal state succeed)
     "Prove GOAL from STATE after any active depth-limit accounting."
     (let ((*current-table-session* (proof-state-table-session state)))
+      ;; The one place every goal passes, so PHRASE-TOKEN-VALID-P checks the
+      ;; tail and classifies each goal here; see dcg-token-check.lisp.
+      (when *phrase-probe*
+        (%phrase-probe-check-tail state))
       (multiple-value-bind (normalized-goal explicit-module solver)
           (%resolve-dispatch-target goal state (proof-state-bindings state)
                                     +call-context-atom+)
-        ;; The one place every goal passes, so PHRASE-TOKEN-VALID-P
-        ;; classifies each goal here; see dcg-token-check.lisp.
         (if *phrase-probe*
             (%phrase-probe-dispatch/k normalized-goal explicit-module solver
                                       state succeed)

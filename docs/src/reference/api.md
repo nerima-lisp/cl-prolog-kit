@@ -746,8 +746,12 @@ git_branch(dev)."))
   those listed below, or the derivation succeeds. Guards on later tokens are
   not run, so the result over-accepts: with `oa --> [a], [_], {fail}.` the
   token `a` is accepted though no input is a phrase. Touching `R` inside a
-  negation or a solution collection (`\+`, `forall/2`, `findall/3`,
-  `bagof/3`, `setof/3`, `aggregate_all/3`) also accepts.
+  negation, a solution collection or `catch/3` (`\+`, `forall/2`,
+  `findall/3`, `bagof/3`, `setof/3`, `aggregate_all/3`, `catch/3`,
+  `setup_call_cleanup/3`, `call_cleanup/2`) also accepts.
+- An exception from the check is not a judgement on the token. A grammar
+  error that escapes the check, such as calling an unbound goal before the
+  token is read, reaches the caller as a condition, never as a false result.
 - A term with variables is not a token. Checking a schema such as
   `file(_)` cannot reject its instances: with `pk(a) :- !. pk(b).` and
   `fl --> [file(X)], {pk(X), X == b}.`, the check of `file(_)` is false
@@ -758,11 +762,12 @@ arguments: `=`, `call/N`, conjunction, disjunction, `true`, `fail`,
 `false`, `member/2`, `append/3`, `between/3`, `length/2`, `select/3`,
 `phrase/2,3` and the `def-dcg-rule` matchers `dcg-token-match`,
 `dcg-token-match-value`, `dcg-alt` and `dcg-opt`. It also runs `once/1`,
-`ignore/1`, `->`, `*->`, if-then-else and `catch/3` as usual, because they
-pass their inner goal's bindings on, and the goals inside them are checked
-in turn. A negation or a solution collection drops its inner goal's
-bindings and decides its result without starting another goal, so a
-binding of `R` inside it would go unseen; the check accepts instead. All of
+`ignore/1`, `->`, `*->` and if-then-else as usual, because they pass their
+inner goal's bindings on, and the goals inside them are checked in turn. A
+negation or a solution collection drops its inner goal's bindings and
+decides its result without starting another goal, and `catch/3` does the
+same when its goal raises, so a binding of `R` inside them would go
+unseen; the check accepts instead. All of
 these are recognized by their solver, so a foreign predicate with one of
 these names is not. Each check uses its own table session, so tables built
 while checking are not reused by later queries.
@@ -786,6 +791,8 @@ deadline when the grammar comes from a source you do not control.
   `\+ [x]` in a DCG body is not translated to a lookahead. A lookahead
   written with negation cannot make the check reject a token: when the
   negation reaches the tail after the token, the check accepts.
+- Wrapping goals that read or test tokens in `catch/3` makes the check
+  accept wherever the `catch/3` reaches the tail after the token.
 
 ## Conditions
 
