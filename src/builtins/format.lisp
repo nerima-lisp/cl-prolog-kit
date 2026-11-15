@@ -78,11 +78,16 @@
   (let ((text (write-to-string integer :base radix)))
     (if upcase (string-upcase text) (string-downcase text))))
 
-(defun %format-float (directive places value)
-  "Render VALUE with the CL float DIRECTIVE (#\\f #\\e #\\g) and PLACES digits.
-For ~e/~g the Common Lisp exponent marker (e.g. `d' for double-floats) is
-normalized to `e', matching the Prolog/C convention; ~g's alignment padding is
-trimmed so the result reads like SWI's ~g."
+(defconstant +format-float-exact-places+
+  (+ (- (nth-value 1 (integer-decode-float least-positive-double-float)))
+     (1+ (floor (log most-positive-double-float 10))))
+  "Places past which ~f/~e/~g output of a double gains only zeros.
+A double is an integer times 2^-1074 at the finest, so its exact decimal
+expansion has at most 1074 fractional digits.  ~g may spend up to 309 of its
+places on integer digits (the decimal exponent of the largest double), so the
+sum covers all three directives.")
+
+(defun %format-float-text (directive places value)
   (let ((text (format nil (format nil "~~,~D~C" places directive) value)))
     (if (char= directive #\f)
         text
@@ -94,6 +99,26 @@ trimmed so the result reads like SWI's ~g."
               (lambda (character)
                 (if (alpha-char-p character) #\e character))
               text)))))
+
+(defun %format-float (directive places value)
+  "Render VALUE with the CL float DIRECTIVE (#\\f #\\e #\\g) and PLACES digits.
+For ~e/~g the Common Lisp exponent marker (e.g. `d' for double-floats) is
+normalized to `e', matching the Prolog/C convention; ~g's alignment padding is
+trimmed so the result reads like SWI's ~g.
+
+Past +FORMAT-FLOAT-EXACT-PLACES+ every further place is a zero, so the text is
+rendered at that precision and padded: rendering a million places directly
+takes the printer seconds."
+  (if (<= places +format-float-exact-places+)
+      (%format-float-text directive places value)
+      (let* ((text (%format-float-text directive +format-float-exact-places+
+                                       value))
+             (end (or (position #\e text) (length text))))
+        (concatenate 'string
+                     (subseq text 0 end)
+                     (make-string (- places +format-float-exact-places+)
+                                  :initial-element #\0)
+                     (subseq text end)))))
 
 (defun %format-digit-count (numeric-argument default environment operation)
   "Return the digit count of ~d/~f/~e/~g: NUMERIC-ARGUMENT or DEFAULT.

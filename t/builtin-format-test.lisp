@@ -164,3 +164,29 @@ rather than raising."
     (assert-query rulebase (cl-prolog-kit::print cl-prolog-kit::user_output (foo bar))
                   :succeeds)
     (is (string= (get-output-stream-string output) "foo(bar)"))))
+
+(defparameter *format-float-sample-values*
+  (list 0.1d0 (/ 1d0 3) 1d300 least-positive-double-float -0.1d0 (- (/ 1d0 3))
+        -1d300 (- least-positive-double-float) most-positive-double-float
+        0d0 1d0 -2.5d0 123456789d0 1d-5 7 -42))
+
+(deftest format-float-padding-matches-direct-rendering ()
+  (let ((threshold cl-prolog-kit::+format-float-exact-places+))
+    (dolist (value *format-float-sample-values*)
+      (dolist (directive '(#\f #\e #\g))
+        (dolist (places (list (1+ threshold) (+ threshold 37) (* 2 threshold)))
+          (is-equal (cl-prolog-kit::%format-float-text
+                     directive places (float value 1d0))
+                    (cl-prolog-kit::%format-float
+                     directive places (float value 1d0))
+                    (format nil "~~~D~C of ~S" places directive value)))))))
+
+(deftest format-float-with-a-million-places-is-fast ()
+  (let* ((start (get-internal-run-time))
+         (text (cl-prolog-kit::%format-float #\e 1000000 1d0)))
+    (is (< (/ (- (get-internal-run-time) start) internal-time-units-per-second)
+           1/2))
+    (is-equal (cl-prolog-kit::%format-float-text #\e 6 1d0)
+              (concatenate 'string "1.000000"
+                           (subseq text (position #\e text))))
+    (is-equal 1000000 (- (position #\e text) 2))))
