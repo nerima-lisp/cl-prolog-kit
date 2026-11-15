@@ -16,132 +16,128 @@
 (defvar *depth-limited-search-p* nil)
 ;;; Inference and deadline limits.
 ;;;
-;;; Every goal dispatch decrements *INFERENCE-COUNTDOWN*; only when it goes
-;;; negative does %INFERENCE-COUNTDOWN-EXPIRED consult the limits.  The
-;;; countdown covers at most +INFERENCE-DEADLINE-POLL-INTERVAL+ dispatches
-;;; while a deadline is active, and the whole budget otherwise; the rest of
-;;; the budget waits in the state's RESERVE.  Without limits the countdown
-;;; starts at MOST-POSITIVE-FIXNUM, so the hot path is one decrement and one
-;;; sign test either way.
+;;; The outermost query in a thread's dynamic extent (the root) binds one
+;;; counter, *INFERENCE-USED*, and every query nested inside it charges that
+;;; same counter.  The limits are dynamically bound bounds on it: the cap
+;;; *INFERENCE-CAP*, an absolute value of *INFERENCE-USED*, and the deadline
+;;; *INFERENCE-DEADLINE*.  A nested query can only lower them.  A cleanup
+;;; goal raises them by one allowance and one grace period, but never past
+;;; the ceilings of the innermost query that has a bound of its own: that
+;;; query's cap plus *INFERENCE-LIMIT-CLEANUP-ALLOWANCE*, and its deadline
+;;; plus *INFERENCE-LIMIT-CLEANUP-GRACE*.  So the root of limit L and
+;;; deadline D runs at most L + allowance inferences and stops by D + grace,
+;;; however its queries nest and whatever catches their stops.
+;;;
+;;; No stop is recorded anywhere.  A stop takes back the charge that caused
+;;; it, so the next charge under the same bounds stops again, and host code
+;;; that swallows a stop cannot continue past it.
+;;;
+;;; The hot path is one increment and one comparison against
+;;; *INFERENCE-CHECK-AT*, the smaller of the cap and the next deadline poll.
+;;; Every binding of the bounds also binds it, so leaving a nested query or
+;;; a cleanup restores a value computed for the restored bounds at an
+;;; earlier, smaller *INFERENCE-USED*; such a value only makes the next
+;;; check come sooner.
 
 (defconstant +inference-deadline-poll-interval+ 256
   "Most goal dispatches between two deadline checks.")
 
 (defparameter *inference-limit-cleanup-allowance* 1000
-  "Inferences shared by every cleanup goal that runs after a query exceeded
-its inference or deadline limit.  Without it a cleanup would trip the
-exhausted limit at its first dispatch.  The pool is minted once per limits
-object, so neither repeated nor nested cleanups can extend it, and it stays
-below the recursion depth that exhausts the default control stack.")
+  "Inferences a cleanup goal may run past the cap it started under.
+Nested cleanups do not add up past one allowance over the cap of the query
+they run in, and the allowance stays below the recursion depth that
+exhausts the default control stack.")
 
 (defparameter *inference-limit-cleanup-grace*
   (ceiling internal-time-units-per-second 2)
-  "GET-INTERNAL-REAL-TIME units (500 ms) the cleanup pool may run past the
-moment its query stopped: past the query's deadline when that tripped,
-otherwise past the moment the pool was first entered.  Long enough that a GC
-pause between the trip and the cleanup does not cancel a cheap cleanup.")
+  "GET-INTERNAL-REAL-TIME units (500 ms) a cleanup goal may run past the
+deadline it started under, never past the deadline of the query it runs in
+plus one grace period.  Long enough that a GC pause does not cancel a cheap
+cleanup.")
 
-(declaim (type fixnum *inference-countdown*))
-(defvar *inference-countdown* most-positive-fixnum
-  "Goal dispatches left before the active inference limits are consulted.")
+(declaim (type fixnum *inference-used* *inference-check-at*))
+(defvar *inference-used* 0
+  "Inferences charged so far to the running root query.")
 
-(defstruct (%inference-limits
-            (:constructor %make-inference-limits
-                (limit reserve deadline enclosing
-                 &aux (cleanup-p (and enclosing
-                                      (%inference-limits-cleanup-p
-                                       enclosing)))))
-            (:constructor %make-inference-cleanup-pool
-                (limit deadline enclosing
-                 &aux (reserve limit) (cleanup-pool-p t) (cleanup-p t))))
-  "Limits of one top-level query, shared by the queries nested inside it."
-  (limit nil :type (or null (integer 0)) :read-only t)
-  (reserve nil :type (or null (integer 0)))
-  (deadline nil :type (or null integer) :read-only t)
-  (tripped-p nil)
-  ;; Only the root of a chain of nested limits holds the cleanup pool, so
-  ;; the pool does not grow with nesting depth.
-  (cleanup-pool nil :type (or null %inference-limits))
-  (cleanup-pool-p nil :read-only t)
-  ;; The limits this query was started under: another query's limits or
-  ;; the cleanup pool it runs in.  A cleanup pool points at the root that
-  ;; owns it.  NIL for the root.
-  (enclosing nil :type (or null %inference-limits) :read-only t)
-  ;; True for the cleanup pool and for queries started inside a cleanup that
-  ;; runs on it: they poll their deadline at every inference.
-  (cleanup-p nil :read-only t))
+(defvar *inference-check-at* most-positive-fixnum
+  "Value of *INFERENCE-USED* past which a charge consults the bounds.")
 
-(defun %inference-limits-root (limits)
-  "Return the outermost limits of the chain LIMITS belongs to."
-  (loop for enclosing = (%inference-limits-enclosing limits)
-        while enclosing
-        do (setf limits enclosing))
-  limits)
+(defvar *inference-query-active-p* nil
+  "True inside a query, so that a query started there is nested.")
 
-(defvar *inference-limits* nil
-  "The %INFERENCE-LIMITS of the running query, or NIL when it has none.")
+(defvar *inference-cap* nil
+  "Highest *INFERENCE-USED* the running query may reach, or NIL for none.")
 
-(defun %trip-inference-limit (limits condition-type resource message initargs)
-  "Mark LIMITS and every limits enclosing it exceeded, then raise
-CONDITION-TYPE.  The condition unwinds through the enclosing queries too, so
-their cleanups need the cleanup pool as much as this query's do.  The
-countdown stays negative, so a caller that swallows the condition trips it
-again at the next dispatch."
-  ;; If host code between two queries handles the condition and lets the
-  ;; enclosing query go on, that query's later cleanups use the pool too;
-  ;; the pool is still minted once per chain, so this cannot add inferences
-  ;; beyond one allowance.
-  (loop for current = limits then (%inference-limits-enclosing current)
-        while current
-        do (setf (%inference-limits-tripped-p current) t))
-  (%raise-resource-error resource nil (%iso-atom "CALL") message
-                         :condition-type condition-type
-                         :initargs initargs))
+(defvar *inference-cap-limit* nil
+  "The limit PROLOG-INFERENCE-LIMIT-EXCEEDED reports for *INFERENCE-CAP*.")
 
-(defun %check-inference-deadline (limits)
-  "Raise PROLOG-DEADLINE-EXCEEDED when LIMITS' deadline has passed."
-  (let ((deadline (%inference-limits-deadline limits)))
-    (when (and deadline (>= (get-internal-real-time) deadline))
-      (%trip-inference-limit limits 'prolog-deadline-exceeded "DEADLINE"
-                             "query deadline passed"
-                             (list :deadline deadline)))))
+(defvar *inference-cap-ceiling* nil
+  "Highest *INFERENCE-CAP* a cleanup inside the running query may set.")
 
-(defun %inference-countdown-expired ()
-  "Charge the current dispatch against the reserve, or raise when a limit is
-exhausted.  Called only when *INFERENCE-COUNTDOWN* went negative."
-  (let ((limits *inference-limits*))
-    (if (null limits)
-        (setf *inference-countdown* most-positive-fixnum)
-        (let ((reserve (%inference-limits-reserve limits))
-              (deadline (%inference-limits-deadline limits)))
-          (when (eql reserve 0)
-            (%trip-inference-limit
-             limits 'prolog-inference-limit-exceeded "INFERENCES"
-             "inference limit exceeded"
-             (list :limit (%inference-limits-limit limits))))
-          (%check-inference-deadline limits)
-          (let ((chunk (%inference-chunk
-                        reserve deadline
-                        (%inference-limits-cleanup-p limits))))
-            (when reserve
-              (setf (%inference-limits-reserve limits) (- reserve chunk)))
-            ;; This dispatch consumes the first inference of CHUNK.
-            (setf *inference-countdown* (1- chunk)))))))
+(defvar *inference-deadline* nil
+  "Effective deadline of the running query, or NIL for none.")
 
-(defun %inference-chunk (reserve deadline &optional cleanup-pool-p)
-  "Return how many dispatches may run before the limits are consulted again.
-A cleanup pool polls its deadline at every inference: its grace period is
-short, and the cleanup runs only after the query has already stopped."
-  (let ((chunk (cond ((null deadline) most-positive-fixnum)
-                     (cleanup-pool-p 1)
-                     (t +inference-deadline-poll-interval+))))
-    (if reserve (min reserve chunk) chunk)))
+(defvar *inference-deadline-ceiling* nil
+  "Latest *INFERENCE-DEADLINE* a cleanup inside the running query may set.")
+
+(defvar *inference-in-cleanup-p* nil
+  "True while a cleanup goal runs.  Its deadline is polled at every charge
+because its grace period is short.")
+
+(defun %min* (a b)
+  "Return the smaller of A and B, either of which may be NIL for unbounded."
+  (cond ((null a) b) ((null b) a) (t (min a b))))
+
+(defun %inference-next-check ()
+  "Return the *INFERENCE-USED* value past which a charge must consult the
+current bounds."
+  (let ((poll (and *inference-deadline*
+                   (+ *inference-used*
+                      (if *inference-in-cleanup-p*
+                          0
+                          (1- +inference-deadline-poll-interval+))))))
+    (min most-positive-fixnum
+         (or (%min* *inference-cap* poll) most-positive-fixnum))))
+
+(defun %inference-deadline-passed-p ()
+  (let ((deadline *inference-deadline*))
+    (and deadline (>= (get-internal-real-time) deadline))))
+
+(defun %raise-deadline-exceeded ()
+  (%raise-resource-error "DEADLINE" nil (%iso-atom "CALL")
+                         "query deadline passed"
+                         :condition-type 'prolog-deadline-exceeded
+                         :initargs (list :deadline *inference-deadline*)))
+
+(defun %check-inference-deadline ()
+  "Raise PROLOG-DEADLINE-EXCEEDED when the effective deadline has passed."
+  (when (%inference-deadline-passed-p)
+    (%raise-deadline-exceeded)))
+
+(defun %inference-check ()
+  "Raise when the current charge exceeds the cap or the deadline has passed,
+else schedule the next check.  Called only when *INFERENCE-USED* passed
+*INFERENCE-CHECK-AT*.  A stopping charge is taken back: its inference does
+not run, so the stop leaves *INFERENCE-USED* at most at the cap, and the
+next charge under the same bounds stops again."
+  (let ((cap *inference-cap*))
+    (cond ((and cap (> *inference-used* cap))
+           (decf *inference-used*)
+           (%raise-resource-error "INFERENCES" nil (%iso-atom "CALL")
+                                  "inference limit exceeded"
+                                  :condition-type 'prolog-inference-limit-exceeded
+                                  :initargs (list :limit *inference-cap-limit*)))
+          ((%inference-deadline-passed-p)
+           (decf *inference-used*)
+           (%raise-deadline-exceeded))
+          (t
+           (setf *inference-check-at* (%inference-next-check))))))
 
 (defmacro %count-inference ()
   "Charge one inference (a goal dispatch or a builtin solution) against the
 running query's limits."
-  `(when (minusp (decf *inference-countdown*))
-     (%inference-countdown-expired)))
+  `(when (> (incf *inference-used*) *inference-check-at*)
+     (%inference-check)))
 
 (defun %validate-max-inferences (value)
   "Return VALUE when it is NIL or a non-negative integer, else signal TYPE-ERROR."
@@ -155,130 +151,93 @@ running query's limits."
     (error 'type-error :datum value :expected-type '(or null integer)))
   value)
 
+(defun %call-with-query-bounds (limit deadline function)
+  "Call FUNCTION with the bounds lowered to LIMIT more inferences and to
+DEADLINE, either of which may be NIL for no bound of its own.  A bound that
+does not lower the enclosing one is ignored.  A bound that does also lowers
+the ceiling to itself plus one cleanup allowance or grace period, so that
+cleanups inside this query cannot raise it further; without a ceiling of
+its own, a query nested in a root that has no limit would let every
+recursive cleanup raise the cap again."
+  (let* ((own-cap (and limit (+ *inference-used* limit)))
+         (own-cap-p (and own-cap
+                         (or (null *inference-cap*)
+                             (<= own-cap *inference-cap*))))
+         (*inference-cap* (if own-cap-p own-cap *inference-cap*))
+         (*inference-cap-limit* (if own-cap-p limit *inference-cap-limit*))
+         (*inference-cap-ceiling*
+           (if own-cap-p
+               (%min* *inference-cap-ceiling*
+                      (+ own-cap *inference-limit-cleanup-allowance*))
+               *inference-cap-ceiling*))
+         (own-deadline-p (and deadline
+                              (or (null *inference-deadline*)
+                                  (< deadline *inference-deadline*))))
+         (*inference-deadline* (if own-deadline-p deadline *inference-deadline*))
+         (*inference-deadline-ceiling*
+           (if own-deadline-p
+               (%min* *inference-deadline-ceiling*
+                      (+ deadline *inference-limit-cleanup-grace*))
+               *inference-deadline-ceiling*))
+         (*inference-check-at* (%inference-next-check)))
+    (%check-inference-deadline)
+    (funcall function)))
+
 (defun %call-with-inference-limits (max-inferences deadline function)
   "Call FUNCTION as one top-level query under MAX-INFERENCES and DEADLINE.
 
 Each argument is the caller's explicit value, NIL, or :DEFAULT when the
 caller passed none.  A query nested inside a running query that has limits
 (a foreign predicate re-entering the engine) and passes neither limit shares
-the enclosing query's remaining budget and deadline.  Otherwise the query gets
-its own limits: the explicit values, or *MAX-PROLOG-INFERENCES* and
-*PROLOG-DEADLINE* for :DEFAULT, except that its deadline is never later
-than the enclosing query's.  Inside a cleanup running on the cleanup pool,
-its budget is also capped by what the pool has left, and the inferences it
-uses are charged to the pool; see %CALL-CHARGED-TO-CLEANUP-POOL."
-  (let ((enclosing *inference-limits*))
-    (if (and enclosing
-             (member max-inferences '(nil :default))
-             (member deadline '(nil :default)))
-        (progn
-          (%check-inference-deadline enclosing)
-          (funcall function))
-        (let* ((limit (%validate-max-inferences
-                       (if (eq max-inferences :default)
-                           *max-prolog-inferences*
-                           max-inferences)))
-               (deadline (%validate-deadline
-                          (if (eq deadline :default)
-                              *prolog-deadline*
-                              deadline))))
-          ;; A nested query with limits of its own still stops at the
-          ;; enclosing deadline.
-          (when (and enclosing (%inference-limits-deadline enclosing))
-            (setf deadline
-                  (if deadline
-                      (min deadline (%inference-limits-deadline enclosing))
-                      (%inference-limits-deadline enclosing))))
-          (cond
-            ((and enclosing (%inference-limits-cleanup-pool-p enclosing))
-             (%call-charged-to-cleanup-pool enclosing limit deadline function))
-            ((and (null limit) (null deadline))
-             (let ((*inference-limits* nil)
-                   (*inference-countdown* most-positive-fixnum))
-               (funcall function)))
-            (t
-             (%call-with-fresh-inference-limits
-              limit deadline enclosing function)))))))
-
-(defun %call-with-fresh-inference-limits (limit deadline enclosing function)
-  "Call FUNCTION under new limits LIMIT and DEADLINE started inside
-ENCLOSING (or NIL)."
-  (let* ((countdown (%inference-chunk limit deadline))
-         (limits (%make-inference-limits
-                  limit (and limit (- limit countdown)) deadline enclosing))
-         (*inference-limits* limits)
-         (*inference-countdown* countdown))
-    (%check-inference-deadline limits)
-    (funcall function)))
-
-(defun %call-charged-to-cleanup-pool (pool limit deadline function)
-  "Call FUNCTION, a nested query with its own LIMIT started by a cleanup
-running on POOL.  The query may use at most what POOL has left (less when
-LIMIT is lower), and whatever it uses is taken from POOL, so a cleanup cannot
-escape the pool by starting a query with a larger budget."
-  (let* ((available (+ (%inference-limits-reserve pool)
-                       (max 0 *inference-countdown*)))
-         (granted (if limit (min limit available) available)))
-    ;; Hand the pool's whole remainder to the nested query and take back
-    ;; what it leaves unused.
-    (setf (%inference-limits-reserve pool) (- available granted)
-          *inference-countdown* 0)
-    (let* ((countdown (%inference-chunk granted deadline t))
-           (limits (%make-inference-limits
-                    granted (- granted countdown) deadline pool))
-           (*inference-limits* limits)
-           (*inference-countdown* countdown))
-      (unwind-protect
-           (progn
-             (%check-inference-deadline limits)
-             (funcall function))
-        (incf (%inference-limits-reserve pool)
-              (+ (%inference-limits-reserve limits)
-                 (max 0 *inference-countdown*)))))))
+the enclosing query's bounds.  Otherwise the explicit values, or
+*MAX-PROLOG-INFERENCES* and *PROLOG-DEADLINE* for :DEFAULT, can only lower
+the enclosing bounds: a nested query charges the root's counter and stops at
+whichever of its own and the enclosing bounds comes first."
+  (if (and (or *inference-cap* *inference-deadline*)
+           (member max-inferences '(nil :default))
+           (member deadline '(nil :default)))
+      (progn
+        (%check-inference-deadline)
+        (funcall function))
+      (let ((limit (%validate-max-inferences
+                    (if (eq max-inferences :default)
+                        *max-prolog-inferences*
+                        max-inferences)))
+            (deadline (%validate-deadline
+                       (if (eq deadline :default)
+                           *prolog-deadline*
+                           deadline))))
+        (if *inference-query-active-p*
+            (%call-with-query-bounds limit deadline function)
+            (let ((*inference-query-active-p* t)
+                  (*inference-used* 0))
+              (%call-with-query-bounds limit deadline function))))))
 
 (defmacro %with-inference-limits ((max-inferences deadline) &body body)
   "Run BODY as one top-level query; see %CALL-WITH-INFERENCE-LIMITS."
   `(%call-with-inference-limits ,max-inferences ,deadline
                                 (lambda () ,@body)))
 
-(defun %inference-cleanup-pool (limits)
-  "Return the cleanup pool of the chain LIMITS belongs to, minting it on
-first use.  Its deadline counts from LIMITS, the limits that stopped."
-  (let ((root (%inference-limits-root limits)))
-    (or (%inference-limits-cleanup-pool root)
-        (let* ((now (get-internal-real-time))
-               (deadline (%inference-limits-deadline limits))
-               (allowance *inference-limit-cleanup-allowance*))
-          (setf (%inference-limits-cleanup-pool root)
-                (%make-inference-cleanup-pool
-                 allowance
-                 (+ (if deadline (min deadline now) now)
-                    *inference-limit-cleanup-grace*)
-                 root))))))
-
 (defun %call-with-cleanup-inference-allowance (function)
-  "Call FUNCTION, a cleanup goal.  After the running query, or a query
-nested inside it, tripped a limit, the cleanup draws on the single cleanup
-pool of the outermost limits; a cleanup already running on the pool keeps
-drawing on it.  Inferences it leaves unused return to the pool."
-  (let ((limits *inference-limits*))
-    (if (or (null limits)
-            (%inference-limits-cleanup-pool-p limits)
-            (not (%inference-limits-tripped-p limits)))
-        (funcall function)
-        (let* ((pool (%inference-cleanup-pool limits))
-               (reserve (%inference-limits-reserve pool))
-               (countdown (%inference-chunk
-                           reserve (%inference-limits-deadline pool) t)))
-          (setf (%inference-limits-reserve pool) (- reserve countdown))
-          (let ((*inference-limits* pool)
-                (*inference-countdown* countdown))
-            (unwind-protect
-                 (progn
-                   (%check-inference-deadline pool)
-                   (funcall function))
-              (incf (%inference-limits-reserve pool)
-                    (max 0 *inference-countdown*))))))))
+  "Call FUNCTION, a cleanup goal, with the cap raised by one allowance and
+the deadline by one grace period, each bounded by its ceiling.  The goal
+gets them however the query left it: a stop leaves *INFERENCE-USED* at most
+at the cap it hit, so the cleanup can still run, and the code after the
+cleanup stops again at its next charge."
+  (let* ((cap *inference-cap*)
+         (deadline *inference-deadline*)
+         (*inference-cap*
+           (and cap (%min* (+ cap *inference-limit-cleanup-allowance*)
+                           *inference-cap-ceiling*)))
+         (*inference-cap-limit*
+           (if cap *inference-limit-cleanup-allowance* *inference-cap-limit*))
+         (*inference-deadline*
+           (and deadline (%min* (+ deadline *inference-limit-cleanup-grace*)
+                                *inference-deadline-ceiling*)))
+         (*inference-in-cleanup-p* t)
+         (*inference-check-at* (%inference-next-check)))
+    (%check-inference-deadline)
+    (funcall function)))
 
 (defmacro %with-cleanup-inference-allowance (&body body)
   "Run BODY, a cleanup goal; see %CALL-WITH-CLEANUP-INFERENCE-ALLOWANCE."
