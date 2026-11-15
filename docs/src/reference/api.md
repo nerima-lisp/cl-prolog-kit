@@ -416,10 +416,7 @@ SBCL's default 2 MB control stack:
   with `compare/3` of terms nested 20,000 levels deep.
 - Writing a term nested deeply enough to pass the checked walks before the
   writer but not the writer's own recursion: `write/1` of a term nested
-  8,000 to 8,500 levels deep.
-- Calling a tabled predicate with a long ground list. The copy of the call
-  that tabling makes recurses down the list without the check: a list of
-  10,000 elements is enough.
+  8,000 to about 17,500 levels deep.
 
 The prover does not reuse stack frames for tail calls, so a deterministic
 tail-recursive predicate such as `count(I, N) :- I < N, I1 is I + 1,
