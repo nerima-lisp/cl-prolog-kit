@@ -95,6 +95,19 @@ trimmed so the result reads like SWI's ~g."
                 (if (alpha-char-p character) #\e character))
               text)))))
 
+(defun %format-digit-count (numeric-argument default environment operation)
+  "Return the digit count of ~d/~f/~e/~g: NUMERIC-ARGUMENT or DEFAULT.
+The count sizes the rendered text, so it is bounded by
+*MAX-PROLOG-BUILTIN-OUTPUT-LENGTH* before anything is rendered; a negative
+count, reachable only through ~*, is a domain error."
+  (let ((count (or numeric-argument default)))
+    (when (minusp count)
+      (%raise-domain-error "NOT_LESS_THAN_ZERO" count environment operation
+                           "format digit count must not be negative"))
+    (%check-builtin-output-length
+     count "DIGIT_COUNT" environment operation
+     "format digit count exceeds the configured output limit")))
+
 (defun %format-string-error (text environment operation message)
   "Raise a catchable ISO domain_error(format_string, ...) for a malformed
 format string, so untrusted format text can only trigger catchable errors.
@@ -151,8 +164,16 @@ control (~t fill, ~| absolute column, ~+ relative column)."
         (segment-column 0)   ; column where the pending segment began
         (pending-text-length 0)
         (pending-fill-count 0)
+        (generated 0)        ; characters produced from counts, not arguments
         (pieces '()))        ; reversed: strings and (:fill . char)
-    (labels ((next-argument ()
+    (labels ((charge (count)
+               ;; Each count is bounded on its own, but a format string may
+               ;; repeat a directive, so the whole call is bounded as well.
+               (incf generated count)
+               (%check-builtin-output-length
+                generated "FORMAT_OUTPUT_LENGTH" environment operation
+                "format output exceeds the configured output limit"))
+             (next-argument ()
                (when (null remaining)
                  (%raise-domain-error "FORMAT_ARGUMENTS" (%iso-atom "format")
                                       environment operation
@@ -174,6 +195,7 @@ control (~t fill, ~| absolute column, ~+ relative column)."
                  (%check-builtin-output-length
                   deficit "COLUMN_WIDTH" environment operation
                   "format column fill exceeds the configured output limit")
+                 (charge deficit)
                  (if (zerop fills)
                      (progn
                        (dolist (piece (reverse pieces))
@@ -205,6 +227,7 @@ control (~t fill, ~| absolute column, ~+ relative column)."
                (%check-builtin-output-length
                 (max 1 count) "NEWLINE_COUNT" environment operation
                 "format ~n count exceeds the configured output limit")
+               (charge (max 1 count))
                (commit-plain)
                (dotimes (i (max 1 count)) (write-char #\Newline output))
                (setf line-column 0 segment-column 0)))
@@ -231,7 +254,10 @@ control (~t fill, ~| absolute column, ~+ relative column)."
                      (unless (integerp value)
                        (%raise-type-error "INTEGER" value environment operation
                                           "~~d expects an integer"))
-                     (add-text (%format-decimal-shifted value (or numeric-argument 0)))))
+                     (let ((places (%format-digit-count numeric-argument 0
+                                                        environment operation)))
+                       (charge places)
+                       (add-text (%format-decimal-shifted value places)))))
                   ((#\D)
                    (let ((value (next-argument)))
                      (unless (integerp value)
@@ -240,7 +266,9 @@ control (~t fill, ~| absolute column, ~+ relative column)."
                      (add-text (%format-grouped-integer value))))
                   ((#\f #\e #\g)
                    (let ((value (next-argument))
-                         (places (or numeric-argument 6)))
+                         (places (%format-digit-count numeric-argument 6
+                                                      environment operation)))
+                     (charge places)
                      (unless (or (integerp value) (floatp value))
                        (%raise-type-error "NUMBER" value environment operation
                                           "~f/~e/~g expect a number"))
@@ -263,6 +291,7 @@ control (~t fill, ~| absolute column, ~+ relative column)."
                      (%check-builtin-output-length
                       (max 0 count) "REPEAT_COUNT" environment operation
                       "format ~c count exceeds the configured output limit")
+                     (charge (max 0 count))
                      (add-text (make-string (max 0 count)
                                             :initial-element
                                             (%code-character code environment operation)))))

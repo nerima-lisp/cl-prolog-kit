@@ -13,8 +13,17 @@
 (defun %fd-domain (values)
   (sort (remove-duplicates (copy-list values)) #'<))
 
-(defun %fd-interval (lower upper)
-  (and (<= lower upper) (loop for value from lower to upper collect value)))
+(declaim (ftype function %check-builtin-output-length))
+
+(defun %fd-interval (lower upper environment context)
+  "Return the explicit value list LOWER..UPPER.
+Domains are stored as explicit lists, so the interval size is bounded by
+*MAX-PROLOG-BUILTIN-OUTPUT-LENGTH* before any value is materialized."
+  (when (<= lower upper)
+    (%check-builtin-output-length
+     (1+ (- upper lower)) "FD_DOMAIN_SIZE" environment context
+     "finite domain interval exceeds the configured output limit")
+    (loop for value from lower to upper collect value)))
 
 (defun %fd-range-symbol-p (term)
   (and (symbolp term) (string= (symbol-name term) "..")))
@@ -27,13 +36,13 @@
             (%fd-range-symbol-p (second resolved))
             (integerp (first resolved))
             (integerp (third resolved)))
-       (%fd-interval (first resolved) (third resolved)))
+       (%fd-interval (first resolved) (third resolved) environment context))
       ((and (%proper-list-p resolved)
             (= (length resolved) 3)
             (%fd-range-symbol-p (first resolved))
             (integerp (second resolved))
             (integerp (third resolved)))
-       (%fd-interval (second resolved) (third resolved)))
+       (%fd-interval (second resolved) (third resolved) environment context))
       ((and (%proper-list-p resolved) (every #'integerp resolved))
        (%fd-domain resolved))
       (t
@@ -49,9 +58,18 @@
                                  :key #'car :test #'eq))
                   (fd-store-constraints store)))
 
+(defun %fd-intersection (current allowed)
+  "Return CURRENT's values that also occur in ALLOWED, in linear time.
+CL:INTERSECTION is quadratic, which a domain near the output limit turns
+into a host-blocking loop."
+  (let ((members (make-hash-table :test #'eql :size (length allowed))))
+    (dolist (value allowed)
+      (setf (gethash value members) t))
+    (remove-if-not (lambda (value) (gethash value members)) current)))
+
 (defun %fd-restrict-domain (store variable allowed)
   (let* ((current (%fd-domain-of store variable))
-         (domain (if current (intersection current allowed) allowed)))
+         (domain (if current (%fd-intersection current allowed) allowed)))
     (values (%fd-put-domain store variable (%fd-domain domain))
             (not (null domain)))))
 

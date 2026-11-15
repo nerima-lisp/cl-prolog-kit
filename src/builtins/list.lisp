@@ -1,5 +1,7 @@
 (in-package #:cl-prolog-kit)
 
+(declaim (ftype function %check-builtin-output-length))
+
 (defun %unify-sequence (pairs environment continuation)
   "Unify PAIRS from left to right, then invoke CONTINUATION."
   (if (null pairs)
@@ -177,6 +179,14 @@ BODY."
                              (< count length-value))
                      (when (consp resolved-tail)
                        (setf (gethash resolved-tail seen) t))
+                     ;; Extending a partial list to a given length allocates
+                     ;; the missing cells, so bound them before the first one.
+                     (when (and (logic-var-p resolved-tail)
+                                (integerp length-value))
+                       (%check-builtin-output-length
+                        (- length-value count) "LIST_LENGTH" environment
+                        operation
+                        "length/2 length exceeds the configured length limit"))
                      (let ((head (fresh-logic-variable "?LENGTH-HEAD"))
                            (rest (fresh-logic-variable "?LENGTH-TAIL")))
                        (%unify-sequence

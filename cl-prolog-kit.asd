@@ -165,6 +165,7 @@
                (:file "builtin-io-open-errors-test")
                (:file "builtin-io-code-test")
                (:file "builtin-format-test")
+               (:file "builtin-resource-bounds-test")
                (:file "builtin-char-type-test")
                (:file "builtin-term-io-test")
                (:file "builtin-string-test")
