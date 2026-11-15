@@ -84,28 +84,33 @@ thread has its own rulebase.
 
 ## Ownership of Returned Terms
 
-Terms the library returns may share structure with the clauses a rulebase
-stores. This covers the clauses from `rulebase-visible-clauses`, the bindings
-in solutions from `map-prolog-solutions`, `query-prolog`, `query-prolog-first`,
-and `solution-binding`, and raw environments returned with `:project nil`.
-Strings in those terms are the rulebase's own strings, and other parts may be
-shared too. A caller must treat every returned term as read-only and must not
-destructively modify it (`setf` of `char`, `car`, `cdr`, `aref`, or `nconc`
-and similar), the same convention as for the string `symbol-name` returns.
-To change a returned term, copy it first (for example with `copy-seq` or
-`copy-tree`).
+Terms the library returns share structure with the clauses a rulebase stores.
+This covers the clauses from `rulebase-visible-clauses`, the bindings in
+solutions from `map-prolog-solutions`, `query-prolog`, `query-prolog-first`,
+and `solution-binding`, and raw environments those query functions return
+with `:project nil`. What is shared depends on where the term came from:
 
-The library does not copy terms on the way out, because a query on a
-per-keystroke path would then allocate on every call. Modifying a returned
-term changes the stored clause, and with it the result of later queries, and
-the first-argument string index keys on string contents, so a modified string
-also leaves the index inconsistent. `rulebase-snapshot` shares terms with its
-origin, so the same rule covers both rulebases.
+- Strings, and vectors and other non-cons objects, are always the stored
+  objects themselves.
+- `rulebase-visible-clauses` and projected solution bindings (the default)
+  get fresh cons cells.
+- A raw environment returned with `:project nil` can hold stored terms
+  themselves, conses included.
 
-Terms passed in are not affected by this rule. `make-rulebase`,
-`rulebase-insert-clause!`, `rulebase-insert-clauses!`, and the overlay
-functions store their own copy of each clause, strings included, so a caller
-may modify its own terms after inserting them.
+Treat every returned term as read-only, the same convention as for the string
+`symbol-name` returns. Do not apply a destructive operation to any part of it:
+`setf` of `char`, `aref`, `car`, or `cdr`, and functions such as `nconc`,
+`sort`, or `nstring-upcase`. A modification changes the stored clause and the
+result of later queries. The first-argument string index keys on string
+contents, so a modified string also leaves the index inconsistent. To change
+a returned term, copy it first, including the strings inside it: `copy-tree`
+alone leaves the strings shared. A term returned from a `rulebase-snapshot`
+is shared with the rulebase it was taken from, so modifying it changes both.
+
+Terms passed in are copied. `make-rulebase`, `rulebase-insert-clause!`,
+`rulebase-insert-clauses!`, `rulebase-extend`, `call-with-overlay-facts`, and
+`with-overlay-facts` store their own copy of each clause's conses and strings,
+so a caller may modify those parts of its own terms after inserting them.
 
 ## Atoms
 
