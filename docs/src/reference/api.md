@@ -454,6 +454,18 @@ is planned for v1.7.0 or later. A host that needs deeper recursion can start
 SBCL with a larger `--control-stack-size`, which also sizes the stacks of new
 threads.
 
+Two costs that grow with the square of the input size were already present in
+v1.5.0 and are unchanged. Set `:max-inferences` or `:deadline` to bound
+them:
+
+- Re-asserting a term that grows on every step, as in
+  `retract(acc(X)), assertz(acc(f(X)))` in a loop, copies the whole term on
+  each assert, so time and memory grow with the square of the number of steps.
+  Without a limit, a few thousand steps exhaust SBCL's default heap, which
+  ends the process.
+- `length/2` and `last/2` together on a long list take time that grows with
+  the square of its length: 20,000 elements took over 30 minutes.
+
 ## Capability Policy
 
 A rulebase can restrict what the Prolog goals it runs may do. This is for
