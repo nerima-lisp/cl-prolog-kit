@@ -8,8 +8,11 @@
 
 (defun %check-builtin-output-length (count resource environment operation message)
   "Bound COUNT against *max-prolog-builtin-output-length*, raising a catchable
-resource_error when it is exceeded.  Returns COUNT.  Shared by the list and
-format builtins to cap attacker-controlled allocation."
+resource_error when it is exceeded.  Returns COUNT.  Shared by the list,
+format and finite-domain builtins to cap attacker-controlled allocation, and
+the one place that tells the deadline check a builtin is about to allocate
+much; see %POLL-DEADLINE-AFTER-LARGE-ALLOCATION."
+  (%poll-deadline-after-large-allocation count)
   (when (and *max-prolog-builtin-output-length*
              (> count *max-prolog-builtin-output-length*))
     (%raise-resource-error resource environment operation message))

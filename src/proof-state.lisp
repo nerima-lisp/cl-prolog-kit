@@ -28,7 +28,7 @@
 ;;; deadline D runs at most L + allowance inferences, however its queries
 ;;; nest and whatever catches their stops.  It stops by D + grace plus the
 ;;; time of the charges since the last clock read; see
-;;; %POLL-INFERENCE-DEADLINE.
+;;; %POLL-INFERENCE-DEADLINE and %POLL-DEADLINE-AFTER-LARGE-ALLOCATION.
 ;;;
 ;;; No stop is recorded anywhere.  A stop takes back the charge that caused
 ;;; it, so the next charge under the same bounds stops again, and host code
@@ -53,6 +53,10 @@
   (ceiling internal-time-units-per-second 100)
   "GET-INTERNAL-REAL-TIME units (10 ms) that the time between two clock reads
 should not exceed; see %POLL-INFERENCE-DEADLINE.")
+
+(defconstant +inference-deadline-large-allocation+ 512
+  "Element count above which a builtin's bounded allocation makes the next
+charge read the clock; see %POLL-DEADLINE-AFTER-LARGE-ALLOCATION.")
 
 (defparameter *inference-limit-cleanup-allowance* 1000
   "Inferences a cleanup goal may run past the cap it started under.
@@ -170,6 +174,20 @@ builtin calls far slower than the inferences that set the interval."
       (setf *inference-poll-interval* 1
             *inference-last-poll* now
             *inference-poll-at* *inference-used*))))
+
+(defun %poll-deadline-after-large-allocation (count)
+  "Make the next charge read the clock when a deadline is in force and a
+builtin is about to allocate more than +INFERENCE-DEADLINE-LARGE-ALLOCATION+
+elements.  %CHECK-BUILTIN-OUTPUT-LENGTH calls this before every allocation
+it bounds, so a run of such calls cannot hide behind a poll interval that
+cheap inferences grew: the deadline is noticed when the call that is
+running ends.  Smaller allocations take a few tens of microseconds, so 256
+of them stay within about one poll target; one clock read per larger
+allocation costs well under one percent of it."
+  (when (and *inference-deadline*
+             (> count +inference-deadline-large-allocation+))
+    (setf *inference-poll-at* (min *inference-poll-at* *inference-used*)
+          *inference-check-at* (min *inference-check-at* *inference-used*))))
 
 (defun %inference-check ()
   "Raise when the current charge exceeds the cap or the deadline has passed,
