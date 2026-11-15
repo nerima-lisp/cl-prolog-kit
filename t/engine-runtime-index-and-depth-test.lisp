@@ -628,6 +628,99 @@
                  (hash-table-count
                   (cl-prolog-kit::rulebase-predicate-descriptors rulebase))))))))))
 
+;;; Mutations only mark a descriptor stale; the next lookup rebuilds it.
+(defun %raw-descriptor (rulebase predicate arity)
+  "Return the stored descriptor slot without triggering a rebuild."
+  (let* ((predicates
+           (gethash cl-prolog-kit::+default-prolog-module+
+                    (cl-prolog-kit::rulebase-predicate-descriptors rulebase)))
+         (arities (and predicates (gethash predicate predicates))))
+    (and arities (gethash arity arities))))
+
+(defun %current-descriptor (rulebase predicate arity)
+  (cl-prolog-kit::%rulebase-predicate-descriptor
+   rulebase cl-prolog-kit::+default-prolog-module+ predicate arity))
+
+(deftest predicate-descriptors-are-current-after-lazy-invalidation ()
+  (let ((rulebase (make-rulebase)))
+    ;; Lookup after a run of inserts with no lookup in between.  ASSERTZ
+    ;; declares LAZY/2 dynamic so the retracts below are permitted.
+    (is (prolog-succeeds-p rulebase (quote (assertz (lazy b 1)))))
+    (dolist (head (quote ((lazy a 2) (lazy ?any 3))))
+      (rulebase-insert-clause! rulebase (make-clause head)))
+    (rulebase-insert-clause!
+     rulebase (make-clause (quote (lazy b 0))) :position :first)
+    (is (eq :stale (%raw-descriptor rulebase (quote lazy) 2)))
+    (let ((descriptor (%current-descriptor rulebase (quote lazy) 2)))
+      (is (eq descriptor (%raw-descriptor rulebase (quote lazy) 2)))
+      (is (eq descriptor (%current-descriptor rulebase (quote lazy) 2)))
+      (is-equal (quote ((lazy b 0) (lazy b 1) (lazy a 2) (lazy ?any 3)))
+                (stored-clause-heads
+                 (cl-prolog-kit::%predicate-descriptor-entries descriptor)))
+      (is-equal (quote ((lazy b 0) (lazy b 1) (lazy ?any 3)))
+                (stored-clause-heads
+                 (cl-prolog-kit::%predicate-descriptor-first-argument-entries
+                  descriptor (quote b))))
+      ;; Lookup after retract; the earlier descriptor keeps its snapshot.
+      (is (prolog-succeeds-p rulebase (quote (retract (lazy b 1)))))
+      (is (eq :stale (%raw-descriptor rulebase (quote lazy) 2)))
+      (is-equal (quote ((lazy b 0) (lazy ?any 3)))
+                (stored-clause-heads
+                 (cl-prolog-kit::%predicate-descriptor-first-argument-entries
+                  (%current-descriptor rulebase (quote lazy) 2) (quote b))))
+      (is-equal 4 (length (cl-prolog-kit::%predicate-descriptor-entries
+                           descriptor))))
+    ;; A running query that asserts keeps its logical-update view, while a
+    ;; lookup inside the query sees the new clause.
+    (let ((before (%current-descriptor rulebase (quote lazy) 2))
+          (seen (quote ()))
+          (inside nil))
+      (map-prolog-solutions
+       (lambda (solution)
+         (unless seen
+           (rulebase-insert-clause! rulebase (make-clause (quote (lazy c 4))))
+           (setf inside (%current-descriptor rulebase (quote lazy) 2)))
+         (push (cdr (assoc (quote ?n) solution)) seen))
+       rulebase (quote (lazy ?key ?n)))
+      (is-equal (quote (0 2 3)) (reverse seen))
+      (is (not (eq before inside)))
+      (is-equal (quote ((lazy b 0) (lazy a 2) (lazy ?any 3)))
+                (stored-clause-heads
+                 (cl-prolog-kit::%predicate-descriptor-entries before)))
+      (is-equal (quote ((lazy b 0) (lazy a 2) (lazy ?any 3) (lazy c 4)))
+                (stored-clause-heads
+                 (cl-prolog-kit::%predicate-descriptor-entries inside)))
+      (is-equal (quote (0 2 3 4))
+                (mapcar (lambda (solution) (cdr (assoc (quote ?n) solution)))
+                        (query-prolog rulebase (quote (lazy ?key ?n))))))
+    ;; Copy and snapshot of a rulebase whose descriptor is stale.
+    (rulebase-insert-clause! rulebase (make-clause (quote (lazy d 5))))
+    (is (eq :stale (%raw-descriptor rulebase (quote lazy) 2)))
+    (let ((copy (copy-rulebase rulebase))
+          (snapshot (rulebase-snapshot rulebase))
+          (expected (quote ((lazy b 0) (lazy a 2) (lazy ?any 3)
+                            (lazy c 4) (lazy d 5)))))
+      (dolist (other (list copy snapshot))
+        (is-equal expected
+                  (stored-clause-heads
+                   (cl-prolog-kit::%predicate-descriptor-entries
+                    (%current-descriptor other (quote lazy) 2)))))
+      (rulebase-insert-clause! copy (make-clause (quote (lazy e 6))))
+      (is (prolog-succeeds-p snapshot (quote (retract (lazy a 2)))))
+      (is-equal expected
+                (stored-clause-heads
+                 (cl-prolog-kit::%predicate-descriptor-entries
+                  (%current-descriptor rulebase (quote lazy) 2))))
+      (is-equal 6 (length (query-prolog copy (quote (lazy ?key ?n)))))
+      (is-equal 4 (length (query-prolog snapshot (quote (lazy ?key ?n))))))
+    ;; Retracting every clause removes the descriptor on the next lookup.
+    (is (prolog-succeeds-p
+         rulebase (quote (retractall (lazy ?key ?n)))))
+    (is (eq :stale (%raw-descriptor rulebase (quote lazy) 2)))
+    (is (null (%current-descriptor rulebase (quote lazy) 2)))
+    (is (zerop (hash-table-count
+                (cl-prolog-kit::rulebase-predicate-descriptors rulebase))))))
+
 (deftest predicate-descriptor-candidates-preserve-order-without-lookup-writes ()
   (let* ((rulebase
            (prolog

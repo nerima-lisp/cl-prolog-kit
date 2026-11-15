@@ -72,20 +72,31 @@ the foreign predicates goals may call."
                            :type hash-table :read-only t))
 
 (defun %rulebase-predicate-descriptor (rulebase module predicate arity)
-  "Return the current immutable descriptor without changing any lookup table."
-  (let* ((predicates (gethash module (rulebase-predicate-descriptors rulebase)))
-         (arities (and predicates (gethash predicate predicates))))
-    (and arities (gethash arity arities))))
+  "Return the current immutable descriptor, first rebuilding it when stale.
+A rebuild installs a fresh descriptor; a lookup never changes one in place."
+  (let* ((descriptors (rulebase-predicate-descriptors rulebase))
+         (predicates (gethash module descriptors))
+         (arities (and predicates (gethash predicate predicates)))
+         (descriptor (and arities (gethash arity arities))))
+    (if (eq descriptor :stale)
+        (let ((entries (%rulebase-predicate-entries-at-revision
+                        rulebase module predicate arity
+                        (rulebase-revision rulebase))))
+          (%set-rulebase-predicate-descriptor!
+           descriptors module predicate arity
+           (and entries (%build-predicate-descriptor entries))))
+        descriptor)))
 
-(defun %refresh-rulebase-predicate-descriptor! (rulebase module predicate arity)
-  "Copy-on-write the one descriptor affected by a rulebase mutation."
-  (let ((entries (%rulebase-predicate-entries-at-revision
-                  rulebase module predicate arity
-                  (rulebase-revision rulebase))))
-    (%set-rulebase-predicate-descriptor!
-     (rulebase-predicate-descriptors rulebase)
-     module predicate arity
-     (and entries (%build-predicate-descriptor entries)))))
+(defun %invalidate-rulebase-predicate-descriptor! (rulebase module predicate arity)
+  "Mark the one descriptor affected by a rulebase mutation stale.
+Rebuilding on every mutation made N inserts into one predicate cost O(N^2).
+Every revision change that alters this predicate's visible clauses passes
+through here, so the next lookup rebuilding at the then-current revision
+yields what an eager rebuild would have; a descriptor a running query already
+holds is never modified."
+  (%set-rulebase-predicate-descriptor!
+   (rulebase-predicate-descriptors rulebase)
+   module predicate arity :stale))
 
 (defun %rulebase-source-state (rulebase canonical-pathname)
   "Return CANONICAL-PATHNAME's load state and whether it is registered."
@@ -313,7 +324,7 @@ source registrations, flags, and character conversions are copied as well."
          (rulebase-predicate-index rulebase)
          (rulebase-predicate-tails rulebase))
         (destructuring-bind (entry-module predicate arity) key
-          (%refresh-rulebase-predicate-descriptor!
+          (%invalidate-rulebase-predicate-descriptor!
            rulebase entry-module predicate arity)))))
   rulebase)
 
@@ -327,7 +338,7 @@ source registrations, flags, and character conversions are copied as well."
 The result equals inserting each clause with RULEBASE-INSERT-CLAUSE! at :LAST,
 or, for :FIRST, placing CLAUSES in their order before the existing clauses.
 All of CLAUSES share one new revision, so a running query sees none of them,
-and each affected predicate's descriptor is rebuilt once.  An empty CLAUSES
+and each affected predicate's descriptor is invalidated once.  An empty CLAUSES
 leaves RULEBASE and its revision unchanged."
   (check-type position (member :first :last))
   (when (null clauses)
@@ -367,12 +378,12 @@ leaves RULEBASE and its revision unchanged."
           (setf (gethash key touched-keys) t))))
     (loop for key being the hash-keys of touched-keys
           do (destructuring-bind (entry-module predicate arity) key
-               (%refresh-rulebase-predicate-descriptor!
+               (%invalidate-rulebase-predicate-descriptor!
                 rulebase entry-module predicate arity))))
   rulebase)
 
 (defun %rulebase-retract-entry! (rulebase entry)
-  "Mark ENTRY dead and copy-on-write its predicate descriptor."
+  "Mark ENTRY dead and invalidate its predicate descriptor."
   (when (null (%stored-clause-died-revision entry))
     (let ((key (%stored-clause-predicate-key entry)))
       (setf (%stored-clause-died-revision entry)
@@ -380,12 +391,12 @@ leaves RULEBASE and its revision unchanged."
       (incf (rulebase-dead-entries rulebase))
       (when key
         (destructuring-bind (module predicate arity) key
-          (%refresh-rulebase-predicate-descriptor!
+          (%invalidate-rulebase-predicate-descriptor!
            rulebase module predicate arity))))
     t))
 
 (defun %rulebase-retract-entries! (rulebase entries)
-  "Assign one death revision to live ENTRIES and refresh affected descriptors."
+  "Assign one death revision to live ENTRIES and invalidate affected descriptors."
   (let ((live (remove-if #'%stored-clause-died-revision entries)))
     (when live
       (let ((revision (%next-rulebase-revision! rulebase))
@@ -398,7 +409,7 @@ leaves RULEBASE and its revision unchanged."
         (incf (rulebase-dead-entries rulebase) (length live))
         (dolist (key keys)
           (destructuring-bind (module predicate arity) key
-            (%refresh-rulebase-predicate-descriptor!
+            (%invalidate-rulebase-predicate-descriptor!
              rulebase module predicate arity)))))
     (not (null live))))
 

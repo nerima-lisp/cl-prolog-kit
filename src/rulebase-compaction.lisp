@@ -145,10 +145,12 @@ Only called from %MAYBE-COMPACT-RULEBASE!; see that function and
 when nothing has died since the last compaction.
 
 Deliberately leaves RULEBASE-PREDICATE-DESCRIPTORS untouched: those
-copy-on-write descriptors (%REFRESH-RULEBASE-PREDICATE-DESCRIPTOR!, above)
-are already rebuilt from just the visible entries on every mutation, so they
-never carry dead entries in the first place -- this function only needs to
-catch up the raw storage the descriptors are periodically rebuilt from."
+copy-on-write descriptors are built from just the visible entries (eagerly
+on construction, lazily on the first lookup after a mutation marks one stale,
+see %INVALIDATE-RULEBASE-PREDICATE-DESCRIPTOR!), so they never carry dead
+entries in the first place, and dropping dead entries leaves the visible set
+a later rebuild reads unchanged -- this function only needs to catch up the
+raw storage the descriptors are rebuilt from."
   (when (plusp (rulebase-dead-entries rulebase))
     (let ((live (delete-if #'%stored-clause-died-revision
                             (rulebase-entries rulebase))))
