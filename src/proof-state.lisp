@@ -27,23 +27,35 @@
 (defconstant +inference-deadline-poll-interval+ 256
   "Most goal dispatches between two deadline checks.")
 
-(defparameter *inference-limit-cleanup-allowance* 10000
-  "Fresh inference budget a cleanup goal gets when it runs because a query
-exceeded its inference or deadline limit.  Without it the cleanup would trip
-the exhausted limit at its first dispatch; bounding it keeps a looping
-cleanup from escaping the limit.")
+(defparameter *inference-limit-cleanup-allowance* 1000
+  "Inferences shared by every cleanup goal that runs after a query exceeded
+its inference or deadline limit.  Without it a cleanup would trip the
+exhausted limit at its first dispatch.  The pool is minted once per limits
+object, so neither repeated nor nested cleanups can extend it, and it stays
+below the recursion depth that exhausts the default control stack.")
+
+(defparameter *inference-limit-cleanup-grace*
+  (ceiling internal-time-units-per-second 2)
+  "GET-INTERNAL-REAL-TIME units (500 ms) the cleanup pool may run past the
+moment its query stopped: past the query's deadline when that tripped,
+otherwise past the moment the pool was first entered.  Long enough that a GC
+pause between the trip and the cleanup does not cancel a cheap cleanup.")
 
 (declaim (type fixnum *inference-countdown*))
 (defvar *inference-countdown* most-positive-fixnum
   "Goal dispatches left before the active inference limits are consulted.")
 
 (defstruct (%inference-limits
-            (:constructor %make-inference-limits (limit reserve deadline)))
+            (:constructor %make-inference-limits (limit reserve deadline))
+            (:constructor %make-inference-cleanup-pool
+                (limit deadline &aux (reserve limit) (cleanup-pool-p t))))
   "Limits of one top-level query, shared by the queries nested inside it."
   (limit nil :type (or null (integer 0)) :read-only t)
   (reserve nil :type (or null (integer 0)))
   (deadline nil :type (or null integer) :read-only t)
-  (tripped-p nil))
+  (tripped-p nil)
+  (cleanup-pool nil :type (or null %inference-limits))
+  (cleanup-pool-p nil :read-only t))
 
 (defvar *inference-limits* nil
   "The %INFERENCE-LIMITS of the running query, or NIL when it has none.")
@@ -79,17 +91,21 @@ exhausted.  Called only when *INFERENCE-COUNTDOWN* went negative."
              "inference limit exceeded"
              (list :limit (%inference-limits-limit limits))))
           (%check-inference-deadline limits)
-          (let ((chunk (%inference-chunk reserve deadline)))
+          (let ((chunk (%inference-chunk
+                        reserve deadline
+                        (%inference-limits-cleanup-pool-p limits))))
             (when reserve
               (setf (%inference-limits-reserve limits) (- reserve chunk)))
             ;; This dispatch consumes the first inference of CHUNK.
             (setf *inference-countdown* (1- chunk)))))))
 
-(defun %inference-chunk (reserve deadline)
-  "Return how many dispatches may run before the limits are consulted again."
-  (let ((chunk (if deadline
-                   +inference-deadline-poll-interval+
-                   most-positive-fixnum)))
+(defun %inference-chunk (reserve deadline &optional cleanup-pool-p)
+  "Return how many dispatches may run before the limits are consulted again.
+A cleanup pool polls its deadline at every inference: its grace period is
+short, and the cleanup runs only after the query has already stopped."
+  (let ((chunk (cond ((null deadline) most-positive-fixnum)
+                     (cleanup-pool-p 1)
+                     (t +inference-deadline-poll-interval+))))
     (if reserve (min reserve chunk) chunk)))
 
 (defmacro %count-inference ()
@@ -151,16 +167,45 @@ its own limits: the explicit values, or *MAX-PROLOG-INFERENCES* and
   `(%call-with-inference-limits ,max-inferences ,deadline
                                 (lambda () ,@body)))
 
+(defun %inference-cleanup-pool (limits)
+  "Return LIMITS' cleanup pool, minting it on first use."
+  (or (%inference-limits-cleanup-pool limits)
+      (let* ((now (get-internal-real-time))
+             (deadline (%inference-limits-deadline limits))
+             (allowance *inference-limit-cleanup-allowance*))
+        (setf (%inference-limits-cleanup-pool limits)
+              (%make-inference-cleanup-pool
+               allowance
+               (+ (if deadline (min deadline now) now)
+                  *inference-limit-cleanup-grace*))))))
+
+(defun %call-with-cleanup-inference-allowance (function)
+  "Call FUNCTION, a cleanup goal.  After the running query tripped a limit,
+the cleanup draws on that query's single cleanup pool; a cleanup already
+running on the pool keeps drawing on it.  Inferences it leaves unused return
+to the pool."
+  (let ((limits *inference-limits*))
+    (if (or (null limits)
+            (%inference-limits-cleanup-pool-p limits)
+            (not (%inference-limits-tripped-p limits)))
+        (funcall function)
+        (let* ((pool (%inference-cleanup-pool limits))
+               (reserve (%inference-limits-reserve pool))
+               (countdown (%inference-chunk
+                           reserve (%inference-limits-deadline pool) t)))
+          (setf (%inference-limits-reserve pool) (- reserve countdown))
+          (let ((*inference-limits* pool)
+                (*inference-countdown* countdown))
+            (unwind-protect
+                 (progn
+                   (%check-inference-deadline pool)
+                   (funcall function))
+              (incf (%inference-limits-reserve pool)
+                    (max 0 *inference-countdown*))))))))
+
 (defmacro %with-cleanup-inference-allowance (&body body)
-  "Run BODY, a cleanup goal, under *INFERENCE-LIMIT-CLEANUP-ALLOWANCE* when
-the running query has exceeded a limit; otherwise under the query's limits."
-  (let ((function (gensym "CLEANUP")))
-    `(flet ((,function () ,@body))
-       (if (and *inference-limits*
-                (%inference-limits-tripped-p *inference-limits*))
-           (%call-with-inference-limits
-            *inference-limit-cleanup-allowance* nil #',function)
-           (,function)))))
+  "Run BODY, a cleanup goal; see %CALL-WITH-CLEANUP-INFERENCE-ALLOWANCE."
+  `(%call-with-cleanup-inference-allowance (lambda () ,@body)))
 
 (defvar *constraint-post-unify-hook* nil
   "Function called after builtin =/2 extends an environment.")

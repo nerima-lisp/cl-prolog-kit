@@ -246,6 +246,12 @@ builtins and the predicates CONSULT-PROLOG defined."
 ;;; well as an inference budget, so a regression fails the test instead of
 ;;; hanging the suite.
 
+(defmacro limits-test-stopped-p (&body body)
+  "Return true when BODY raises either limit condition."
+  `(handler-case (progn ,@body nil)
+     (prolog-inference-limit-exceeded () t)
+     (prolog-deadline-exceeded () t)))
+
 (deftest builtin-solutions-are-charged-against-the-budget ()
   (dolist (query '("findall(x, repeat, L)."
                    "findall(L, length(L, _), Ls)."
@@ -259,3 +265,37 @@ builtins and the predicates CONSULT-PROLOG defined."
                              :max-inferences 200
                              :deadline (prolog-deadline-after 1)))
         (format nil "~A must exhaust its inference budget" query))))
+
+(defun limits-test-cleanup-rules ()
+  (consult-prolog "lp :- repeat, fail.
+c :- setup_call_cleanup(true, lp, c).
+nest(0) :- lp.
+nest(N) :- N1 is N - 1, setup_call_cleanup(true, nest(N1), (assertz(ran), lp)).
+heavy :- between(1, 1000000, _), numlist(1, 100000, _), fail.
+heavy."
+                  (make-rulebase)))
+
+(deftest recursive-cleanup-cannot-mint-new-allowances ()
+  (is (limits-test-stopped-p
+        (limits-test-query (limits-test-cleanup-rules) "c."
+                      :max-inferences 2000
+                      :deadline (prolog-deadline-after 1/5)))))
+
+(deftest nested-cleanups-share-one-allowance ()
+  (dolist (depth '(5 200))
+    (let ((rulebase (limits-test-cleanup-rules)))
+      (is (limits-test-stopped-p
+            (limits-test-query rulebase (format nil "nest(~D)." depth)
+                          :max-inferences 2000
+                          :deadline (prolog-deadline-after 1/5))))
+      ;; The first cleanup drains the pool, so every later one stops at its
+      ;; first goal, before its assertz/1.
+      (is-equal 1 (length (limits-test-query rulebase "ran."))))))
+
+(deftest cleanup-allowance-has-a-deadline ()
+  ;; The query trips its inference budget; the cleanup's few inferences are
+  ;; each expensive, so only the pool's grace deadline stops it in time.
+  (is (limits-test-condition (prolog-deadline-exceeded)
+        (limits-test-query (limits-test-cleanup-rules)
+                           "setup_call_cleanup(true, lp, heavy)."
+                      :max-inferences 1000))))
