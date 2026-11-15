@@ -36,6 +36,7 @@ is extensible (see DEFINE-FOREIGN-PREDICATE).")
    #:copy-rulebase
    #:rulebase-extend
    #:rulebase-insert-clause!
+   #:rulebase-insert-clauses!
    #:rulebase-snapshot
    #:call-with-overlay-facts
    #:with-overlay-facts

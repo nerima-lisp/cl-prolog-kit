@@ -191,9 +191,7 @@ persistent metadata such as operator tables may be shared."
 CLAUSES retain their order and precede the clauses already visible in
 RULEBASE.  Operator declarations, predicate properties, I/O state, modules,
 source registrations, flags, and character conversions are copied as well."
-  (let ((extended (copy-rulebase rulebase)))
-    (dolist (clause (reverse clauses) extended)
-      (rulebase-insert-clause! extended clause :position :first))))
+  (rulebase-insert-clauses! (copy-rulebase rulebase) clauses :position :first))
 
 (macrolet ((transfer-slots! (&rest readers)
              `(setf ,@(loop for reader in readers
@@ -317,6 +315,60 @@ source registrations, flags, and character conversions are copied as well."
         (destructuring-bind (entry-module predicate arity) key
           (%refresh-rulebase-predicate-descriptor!
            rulebase entry-module predicate arity)))))
+  rulebase)
+
+(defun rulebase-insert-clauses! (rulebase clauses
+                                 &key
+                                   (position :last)
+                                   (module +default-prolog-module+)
+                                   source)
+  "Insert CLAUSES at POSITION (:FIRST or :LAST) in their order and return RULEBASE.
+
+The result equals inserting each clause with RULEBASE-INSERT-CLAUSE! at :LAST,
+or, for :FIRST, placing CLAUSES in their order before the existing clauses.
+All of CLAUSES share one new revision, so a running query sees none of them,
+and each affected predicate's descriptor is rebuilt once.  An empty CLAUSES
+leaves RULEBASE and its revision unchanged."
+  (check-type position (member :first :last))
+  (when (null clauses)
+    (return-from rulebase-insert-clauses! rulebase))
+  ;; Snapshot every clause before touching RULEBASE, so a malformed clause
+  ;; leaves it unchanged.
+  (let* ((revision (1+ (rulebase-revision rulebase)))
+         (entries (mapcar (lambda (clause)
+                            (%make-owned-stored-clause
+                             clause module revision source))
+                          clauses))
+         (last-cell (last entries))
+         ;; Per-bucket :FIRST insertion runs back to front to keep CLAUSES'
+         ;; order; reversed before splicing ENTRIES into the rulebase.
+         (index-order (if (eq position :first) (reverse entries) entries))
+         (touched-keys (make-hash-table :test #'equal)))
+    (%next-rulebase-revision! rulebase)
+    (ecase position
+      (:first
+       (setf (cdr last-cell) (rulebase-entries rulebase))
+       (when (null (cdr last-cell))
+         (setf (rulebase-entries-tail rulebase) last-cell))
+       (setf (rulebase-entries rulebase) entries))
+      (:last
+       (let ((tail (rulebase-entries-tail rulebase)))
+         (if tail
+             (setf (cdr tail) entries)
+             (setf (rulebase-entries rulebase) entries))
+         (setf (rulebase-entries-tail rulebase) last-cell))))
+    (dolist (entry index-order)
+      (let ((key (%stored-clause-predicate-key entry)))
+        (when key
+          (%insert-index-entry!
+           key entry position
+           (rulebase-predicate-index rulebase)
+           (rulebase-predicate-tails rulebase))
+          (setf (gethash key touched-keys) t))))
+    (loop for key being the hash-keys of touched-keys
+          do (destructuring-bind (entry-module predicate arity) key
+               (%refresh-rulebase-predicate-descriptor!
+                rulebase entry-module predicate arity))))
   rulebase)
 
 (defun %rulebase-retract-entry! (rulebase entry)
