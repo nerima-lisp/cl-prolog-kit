@@ -39,7 +39,7 @@
   (let ((index (if cyclic-p
                    (or (%table-entry-cyclic-answer-index entry)
                        (setf (%table-entry-cyclic-answer-index entry)
-                             (make-hash-table :test (function equal))))
+                             (%make-term-hash-table)))
                    (%table-entry-answer-index entry)))
         (answer-key (if cyclic-p (%variant-graph-key answer) answer)))
     (unless (nth-value 1 (gethash answer-key index))

@@ -3,12 +3,90 @@
 ;;;; %variant-graph-key, %instantiate-variant) used to key and replay them.
 (in-package #:cl-prolog-kit)
 
+(defconstant +term-hash-modulus+ (expt 2 56))
+
+(defconstant +term-hash-tree-walk-limit+ 65536
+  "Nodes %TERM-STRUCTURE-HASH walks as a tree before it hashes each
+distinct cons once instead.")
+
+(defun %term-structure-hash (term)
+  "Return an EQUAL-consistent hash of the whole cons structure of TERM.
+
+SXHASH looks at only the first few levels of a cons tree, so canonical
+goals and answers that differ only deep down (nat(s(s(...)))) all share one
+bucket and every lookup compares against all of them.  The hash is a
+polynomial over the preorder sequence of the tree's nodes, so it depends on
+the tree alone.  It is computed by walking that tree, which allocates only a
+stack of pending cdrs.  A term walked past +TERM-HASH-TREE-WALK-LIMIT+ nodes
+may share subterms: f(T, T) nested n times stands for a tree of 2^n nodes,
+none of whose steps are charged to the inference budget.  Such a term is
+hashed again by %TERM-STRUCTURE-HASH/MEMO, which yields the same value from
+each distinct cons once.  TERM must be acyclic; cyclic tables are keyed by
+%VARIANT-GRAPH-KEY encodings."
+  (let ((hash 0)
+        (budget +term-hash-tree-walk-limit+)
+        (pending '())
+        (node term))
+    (declare (type (integer 0 (#.(expt 2 56))) hash)
+             (type fixnum budget))
+    (loop
+      (when (minusp (decf budget))
+        (return (%term-structure-hash/memo term)))
+      (cond
+        ((consp node)
+         (setf hash (mod (+ (* hash 31) 7) +term-hash-modulus+))
+         (push (cdr node) pending)
+         (setf node (car node)))
+        (t
+         (setf hash (mod (+ (* hash 31) (mod (sxhash node) +term-hash-modulus+))
+                         +term-hash-modulus+))
+         (if pending
+             (setf node (pop pending))
+             (return hash)))))))
+
+(defun %term-structure-hash/memo (term)
+  "%TERM-STRUCTURE-HASH of TERM, from each distinct cons once.
+
+A node's part of the polynomial is a pair (VALUE . WEIGHT), WEIGHT being 31
+to the number of nodes in its tree; the pairs of a cons, its car and its
+cdr concatenate as the preorder sequences do."
+  (flet ((leaf (node)
+           (cons (mod (sxhash node) +term-hash-modulus+) 31))
+         (concatenate-parts (left right)
+           (cons (mod (+ (* (car left) (cdr right)) (car right)) +term-hash-modulus+)
+                 (mod (* (cdr left) (cdr right)) +term-hash-modulus+))))
+    (if (not (consp term))
+        (car (leaf term))
+        (let ((memo (make-hash-table :test (function eq)))
+              (pending (list term)))
+          (flet ((known (node)
+                   (if (consp node) (gethash node memo) (leaf node))))
+            (loop while pending
+                  do (let* ((node (first pending))
+                            (car-part (known (car node)))
+                            (cdr-part (known (cdr node))))
+                       (cond
+                         ((gethash node memo) (pop pending))
+                         ((null car-part) (push (car node) pending))
+                         ((null cdr-part) (push (cdr node) pending))
+                         (t (setf (gethash node memo)
+                                  (concatenate-parts
+                                   (concatenate-parts (cons 7 31) car-part)
+                                   cdr-part))
+                            (pop pending)))))
+            (car (gethash term memo)))))))
+
+(defun %make-term-hash-table ()
+  "Return an EQUAL hash table hashed by %TERM-STRUCTURE-HASH."
+  (make-hash-table :test (function equal)
+                   :hash-function (function %term-structure-hash)))
+
 (defstruct (%table-entry (:copier nil) (:constructor %make-table-entry ())) "Variant-call answers accumulated during one tabled proof."
   (answers (quote ()) :type list)
   (answers-tail (quote ()) :type list)
   (answer-count 0 :type (integer 0 *))
   (answer-index
-    (make-hash-table :test (function equal))
+    (%make-term-hash-table)
     :type
     hash-table
     :read-only
@@ -27,7 +105,7 @@
     (:constructor
       %make-table-session
       (entries module-entries predicate-entries successful-queries))) "Tables shared by every proof nested within one rulebase revision."
-  (entries (make-hash-table :test (function equal)) :type hash-table :read-only t)
+  (entries (%make-term-hash-table) :type hash-table :read-only t)
   (module-entries
     (make-hash-table :test (function equal))
     :type
@@ -57,10 +135,10 @@
     (multiple-value-bind (session present-p) (gethash revision cache)
       (if present-p session
         (setf (gethash revision cache) (%make-table-session
+            (%make-term-hash-table)
             (make-hash-table :test (function equal))
             (make-hash-table :test (function equal))
-            (make-hash-table :test (function equal))
-            (make-hash-table :test (function equal))))))))
+            (%make-term-hash-table)))))))
 
 (defun %canonicalize-variant (term &optional environment-index)
   "Rename TERM variables by first occurrence after resolving ENVIRONMENT-INDEX.

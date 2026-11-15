@@ -1004,3 +1004,48 @@ bounded allocation."
     (is stopped-p)
     (is (< elapsed internal-time-units-per-second)
         (format nil "~D ms" (round (* 1000 elapsed) internal-time-units-per-second)))))
+
+(deftest tabled-generator-stays-cheap-under-an-inference-limit (:timeout 120)
+  ;; nat/1 calls itself first, so it is tabled, and each answer nests one
+  ;; level deeper than the last.  Hashed by SXHASH, which stops a few levels
+  ;; in, every answer fell into one bucket of the answer index: 2000
+  ;; inferences took over a minute.  With the whole term hashed they take
+  ;; about 2 s on a loaded machine; the 30 s bound leaves room for a slow CI
+  ;; runner and still fails on that growth.  The deadline keeps a regression
+  ;; from running into the test timeout.
+  (let ((rulebase (consult-prolog "nat(0).
+nat(s(N)) :- nat(N).")))
+    (let ((start (get-internal-real-time)))
+      (is (limits-test-condition (prolog-inference-limit-exceeded)
+            (query-prolog rulebase (read-prolog-term "nat(X)")
+                          :max-inferences 2000
+                          :deadline (prolog-deadline-after 60))))
+      (is (< (/ (- (get-internal-real-time) start) internal-time-units-per-second)
+             30)))))
+
+(defun limits-test-shared-term (depth)
+  "f(T, T) nested DEPTH times: 2*DEPTH conses standing for a tree of 2^DEPTH."
+  (let ((term (read-prolog-term "a")))
+    (dotimes (level depth term)
+      (setf term (list (read-prolog-term "f") term term)))))
+
+(deftest tabling-hash-stays-bounded-on-shared-subterms (:timeout 30)
+  ;; Walked as the tree it stands for, f(T, T) nested 64 times takes 2^64
+  ;; steps outside any inference check.  Hashed once per distinct cons it
+  ;; takes microseconds; the 5 s bound only has to separate that from never
+  ;; finishing.
+  (let ((shared (limits-test-shared-term 64))
+        (start (get-internal-real-time)))
+    (cl-prolog-kit::%term-structure-hash shared)
+    (is (< (/ (- (get-internal-real-time) start) internal-time-units-per-second) 5)))
+  ;; Sharing must not change the hash: EQUAL terms hash alike.
+  (let ((shared (limits-test-shared-term 12)))
+    (is (equal shared (copy-tree shared)))
+    (is (= (cl-prolog-kit::%term-structure-hash shared)
+           (cl-prolog-kit::%term-structure-hash (copy-tree shared)))))
+  (let ((rulebase (consult-prolog ":- table(p/1).
+p(_).")))
+    (is-equal 1 (length (query-prolog rulebase
+                                      (list (read-prolog-term "p")
+                                            (limits-test-shared-term 16))
+                                      :max-inferences 1000)))))
