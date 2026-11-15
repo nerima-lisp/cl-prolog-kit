@@ -234,8 +234,11 @@ does not enumerate keys on backtracking).
 ## Builtin output resource limit
 
 Builtins that materialize a character run or list from a small input — format
-fill/repeat/newline runs (`~t`, `~|`, `~Nc`, `~Nn`), `tab/1`, and `numlist/3`
-ranges — are bounded by `*max-prolog-builtin-output-length*`. Exceeding it
+fill/repeat/newline runs (`~t`, `~|`, `~Nc`, `~Nn`), format digit counts
+(`~Nd`, `~Ne`, `~Nf`, `~Ng`, including `~*`), `tab/1` and `tab/2`,
+`numlist/3` ranges, `length/2` extending a partial list, and `in/2`/`ins/2`
+intervals — are bounded by `*max-prolog-builtin-output-length*`. One
+`format` call is also bounded in the total it generates this way. Exceeding it
 raises a catchable ISO `resource_error/1`, preventing attacker-controlled
 allocation from a tiny query.
 

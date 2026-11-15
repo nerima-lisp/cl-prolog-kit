@@ -186,6 +186,10 @@ to `nil` disables that single limit.
 `*max-prolog-interned-symbols*` differs from the others: it is a cumulative,
 process-wide bound tracked across parse calls rather than a per-parse limit.
 
+A float literal outside the double-float range, such as `1.0e400`, is a syntax
+error: `syntax_error/1` inside a query, and the parse error that any other
+malformed source signals from `consult-prolog`.
+
 When a bound is exceeded the parser signals `prolog-parser-resource-error`
 (readers `-resource`, `-limit`, `-observed`, `-position`). For the full
 narrative — how each bound behaves, direct-reader vs. in-engine propagation, and
@@ -200,9 +204,17 @@ single builtin call may materialize at **runtime**:
 - `*max-prolog-builtin-output-length*` — the maximum number of characters or
   list elements a single builtin call may produce in one step (default
   `1048576`). It caps `format` fill/repeat/newline runs (`~t`, `~|`, `~Nc`,
-  `~Nn`), `tab/1`, and `numlist/3` ranges, so an attacker-sized count in a tiny
-  query cannot exhaust memory. Exceeding it raises a catchable ISO
-  `resource_error/1`; binding it to `nil` disables the bound.
+  `~Nn`), `format` digit counts (the `N` of `~Nd`, `~Ne`, `~Nf`, `~Ng`, and
+  their `~*` forms), `tab/1` and `tab/2`, `numlist/3` ranges, the cells
+  `length/2` adds to a partial list, and `in/2`/`ins/2` intervals, so an
+  attacker-sized count in a tiny query cannot exhaust memory. Within one
+  `format` call the characters these counts generate are also bounded in
+  total, so repeating a directive does not multiply the limit. Exceeding it
+  raises a catchable ISO `resource_error/1`; binding it to `nil` disables the
+  bound. Finite domains are stored as explicit value lists, so an interval
+  such as `1..N` is limited to this many values even though it is written in a
+  few characters. A negative `~*` digit count raises
+  `domain_error(not_less_than_zero, N)`.
 
 See [Semantics](semantics.md#builtin-output-resource-limit) for the behavioral
 notes.
@@ -322,8 +334,13 @@ Calling a foreign predicate (one defined with `define-foreign-predicate`)
 that the allowlist does not name raises
 `permission_error(execute, foreign_predicate, Name/Arity)`. The check runs at
 dispatch, so it applies however the goal is reached, including `call/N`,
-`findall/3`, and `\+`. The allowlist does not apply to builtins. Write each
-entry with the symbol given to `define-foreign-predicate`.
+`findall/3`, and `\+`. The allowlist does not apply to builtins. An entry
+matches by atom text and arity, not by symbol identity: `(lookup-user 2)`
+allows every foreign predicate whose name has the text `lookup-user` and
+arity 2, whichever package its symbol lives in. Prolog code cannot define
+foreign predicates, so a match can only reach Lisp code loaded into the host
+image, including libraries that define a foreign predicate with the same
+text.
 
 When `allow-file-access` is false, `set_stream_position/2` also raises
 `permission_error(reposition, stream, S)`, so a rule cannot move back in a
