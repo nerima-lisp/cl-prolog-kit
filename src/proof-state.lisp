@@ -25,22 +25,34 @@
 ;;; the ceilings of the innermost query that has a bound of its own: that
 ;;; query's cap plus *INFERENCE-LIMIT-CLEANUP-ALLOWANCE*, and its deadline
 ;;; plus *INFERENCE-LIMIT-CLEANUP-GRACE*.  So the root of limit L and
-;;; deadline D runs at most L + allowance inferences and stops by D + grace,
-;;; however its queries nest and whatever catches their stops.
+;;; deadline D runs at most L + allowance inferences, however its queries
+;;; nest and whatever catches their stops.  It stops by D + grace plus the
+;;; time of the charges since the last clock read; see
+;;; %POLL-INFERENCE-DEADLINE.
 ;;;
 ;;; No stop is recorded anywhere.  A stop takes back the charge that caused
 ;;; it, so the next charge under the same bounds stops again, and host code
 ;;; that swallows a stop cannot continue past it.
 ;;;
 ;;; The hot path is one increment and one comparison against
-;;; *INFERENCE-CHECK-AT*, the smaller of the cap and the next deadline poll.
-;;; Every binding of the bounds also binds it, so leaving a nested query or
-;;; a cleanup restores a value computed for the restored bounds at an
-;;; earlier, smaller *INFERENCE-USED*; such a value only makes the next
-;;; check come sooner.
+;;; *INFERENCE-CHECK-AT*.  Every binding of the bounds also binds it, to the
+;;; smaller of the cap and, while a deadline is in force, the root's
+;;; *INFERENCE-POLL-AT*.  Each clock read at count U sets *INFERENCE-POLL-AT*
+;;; to at most U + 255, so every value *INFERENCE-CHECK-AT* takes is at most
+;;; its binding's cap and at most 255 past the latest clock read.  Leaving a
+;;; nested query or a cleanup restores a value computed earlier for the
+;;; restored bounds, which keeps both properties; it can only make the next
+;;; check come sooner.  So no charge exceeds the cap in force unchecked, and
+;;; while a deadline is in force at most 256 charges pass between two clock
+;;; reads.  Without a deadline the clock is never read.
 
-(defconstant +inference-deadline-poll-interval+ 256
-  "Most goal dispatches between two deadline checks.")
+(defconstant +inference-deadline-max-poll-interval+ 256
+  "Most charges between two clock reads while a deadline is in force.")
+
+(defconstant +inference-deadline-poll-target+
+  (ceiling internal-time-units-per-second 100)
+  "GET-INTERNAL-REAL-TIME units (10 ms) that the time between two clock reads
+should not exceed; see %POLL-INFERENCE-DEADLINE.")
 
 (defparameter *inference-limit-cleanup-allowance* 1000
   "Inferences a cleanup goal may run past the cap it started under.
@@ -55,12 +67,23 @@ deadline it started under, never past the deadline of the query it runs in
 plus one grace period.  Long enough that a GC pause does not cancel a cheap
 cleanup.")
 
-(declaim (type fixnum *inference-used* *inference-check-at*))
+(declaim (type fixnum *inference-used* *inference-check-at*
+                      *inference-poll-at* *inference-poll-interval*))
 (defvar *inference-used* 0
   "Inferences charged so far to the running root query.")
 
 (defvar *inference-check-at* most-positive-fixnum
   "Value of *INFERENCE-USED* past which a charge consults the bounds.")
+
+(defvar *inference-poll-at* 0
+  "Value of *INFERENCE-USED* past which a charge reads the clock while a
+deadline is in force.  Bound by the root and never decreased.")
+
+(defvar *inference-poll-interval* 1
+  "Charges from one clock read to the next; bound by the root.")
+
+(defvar *inference-last-poll* nil
+  "GET-INTERNAL-REAL-TIME of the root's last clock read, or NIL before it.")
 
 (defvar *inference-query-active-p* nil
   "True inside a query, so that a query started there is nested.")
@@ -80,10 +103,6 @@ cleanup.")
 (defvar *inference-deadline-ceiling* nil
   "Latest *INFERENCE-DEADLINE* a cleanup inside the running query may set.")
 
-(defvar *inference-in-cleanup-p* nil
-  "True while a cleanup goal runs.  Its deadline is polled at every charge
-because its grace period is short.")
-
 (defun %min* (a b)
   "Return the smaller of A and B, either of which may be NIL for unbounded."
   (cond ((null a) b) ((null b) a) (t (min a b))))
@@ -91,13 +110,9 @@ because its grace period is short.")
 (defun %inference-next-check ()
   "Return the *INFERENCE-USED* value past which a charge must consult the
 current bounds."
-  (let ((poll (and *inference-deadline*
-                   (+ *inference-used*
-                      (if *inference-in-cleanup-p*
-                          0
-                          (1- +inference-deadline-poll-interval+))))))
-    (min most-positive-fixnum
-         (or (%min* *inference-cap* poll) most-positive-fixnum))))
+  (min most-positive-fixnum
+       (or (%min* *inference-cap* (and *inference-deadline* *inference-poll-at*))
+           most-positive-fixnum)))
 
 (defun %inference-deadline-passed-p ()
   (let ((deadline *inference-deadline*))
@@ -114,6 +129,48 @@ current bounds."
   (when (%inference-deadline-passed-p)
     (%raise-deadline-exceeded)))
 
+(defun %poll-inference-deadline ()
+  "Raise PROLOG-DEADLINE-EXCEEDED, taking back the current charge, when the
+deadline has passed.  Otherwise adapt the poll interval to the time since
+the previous clock read and schedule the next read.
+
+The interval halves, down to 1, when that time exceeded
++INFERENCE-DEADLINE-POLL-TARGET+, and doubles, up to
++INFERENCE-DEADLINE-MAX-POLL-INTERVAL+, when it was under a tenth of it.
+Cheap inferences keep the interval at its maximum, so they read the clock
+no more often than a fixed interval would.  A run of builtin calls that
+each take long shrinks it toward 1.  Either way the deadline is noticed
+within one interval of charges after it passes."
+  (let ((now (get-internal-real-time))
+        (last *inference-last-poll*)
+        (interval *inference-poll-interval*))
+    (when (>= now *inference-deadline*)
+      (decf *inference-used*)
+      (%raise-deadline-exceeded))
+    (when last
+      (let ((elapsed (- now last)))
+        (cond ((> elapsed +inference-deadline-poll-target+)
+               (setf interval (max 1 (ash interval -1))))
+              ((< (* 10 elapsed) +inference-deadline-poll-target+)
+               (setf interval (min +inference-deadline-max-poll-interval+
+                                   (* 2 interval)))))))
+    (setf *inference-poll-interval* interval
+          *inference-last-poll* now
+          *inference-poll-at* (+ *inference-used* interval -1))))
+
+(defun %restart-inference-deadline-polling ()
+  "Read the clock, raising PROLOG-DEADLINE-EXCEEDED when the deadline has
+passed, and poll again at the next charge with the interval back at 1.  A
+cleanup starts this way: it often begins right after a stop, and it may run
+builtin calls far slower than the inferences that set the interval."
+  (when *inference-deadline*
+    (let ((now (get-internal-real-time)))
+      (when (>= now *inference-deadline*)
+        (%raise-deadline-exceeded))
+      (setf *inference-poll-interval* 1
+            *inference-last-poll* now
+            *inference-poll-at* *inference-used*))))
+
 (defun %inference-check ()
   "Raise when the current charge exceeds the cap or the deadline has passed,
 else schedule the next check.  Called only when *INFERENCE-USED* passed
@@ -127,10 +184,10 @@ next charge under the same bounds stops again."
                                   "inference limit exceeded"
                                   :condition-type 'prolog-inference-limit-exceeded
                                   :initargs (list :limit *inference-cap-limit*)))
-          ((%inference-deadline-passed-p)
-           (decf *inference-used*)
-           (%raise-deadline-exceeded))
           (t
+           (when (and *inference-deadline*
+                      (> *inference-used* *inference-poll-at*))
+             (%poll-inference-deadline))
            (setf *inference-check-at* (%inference-next-check))))))
 
 (defmacro %count-inference ()
@@ -210,7 +267,10 @@ whichever of its own and the enclosing bounds comes first."
         (if *inference-query-active-p*
             (%call-with-query-bounds limit deadline function)
             (let ((*inference-query-active-p* t)
-                  (*inference-used* 0))
+                  (*inference-used* 0)
+                  (*inference-poll-at* 0)
+                  (*inference-poll-interval* 1)
+                  (*inference-last-poll* nil))
               (%call-with-query-bounds limit deadline function))))))
 
 (defmacro %with-inference-limits ((max-inferences deadline) &body body)
@@ -234,9 +294,9 @@ cleanup stops again at its next charge."
          (*inference-deadline*
            (and deadline (%min* (+ deadline *inference-limit-cleanup-grace*)
                                 *inference-deadline-ceiling*)))
-         (*inference-in-cleanup-p* t)
-         (*inference-check-at* (%inference-next-check)))
-    (%check-inference-deadline)
+         (*inference-check-at* *inference-check-at*))
+    (%restart-inference-deadline-polling)
+    (setf *inference-check-at* (%inference-next-check))
     (funcall function)))
 
 (defmacro %with-cleanup-inference-allowance (&body body)

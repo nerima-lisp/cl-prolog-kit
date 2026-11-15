@@ -285,8 +285,16 @@ by default.
 - `*prolog-deadline*`: the default deadline, `nil` or an absolute
   `get-internal-real-time` value. A query still running at the deadline raises
   `prolog-deadline-exceeded`. The deadline is checked when the query starts and
-  then at least once every 256 inferences, so a single long-running builtin
-  call can overrun it.
+  then every N inferences; without a deadline the clock is never read. N
+  starts at 1, restarts at 1 when a cleanup goal starts, and adapts at each
+  check, between 1 and 256: it halves when more than 10 ms passed since the
+  previous check, and doubles when less than 1 ms did. A query therefore
+  stops at most 256 inferences after its deadline passes. While inferences
+  keep taking about the same time, that is at most about 10 ms, or one
+  inference when a single inference takes longer. A query that switches from
+  cheap inferences to a run of slow builtin calls can make up to 256 of them
+  after the deadline. The time of one builtin call is bounded only by the
+  per-call limits above, such as `*max-prolog-builtin-output-length*`.
 - `(prolog-deadline-after seconds)` returns the `get-internal-real-time` value
   `seconds` (a non-negative real) from now.
 
@@ -319,27 +327,32 @@ around the call:
   (consult-prolog text rulebase))
 ```
 
-One root query uses at most L + 1000 inferences and stops by D + 500 ms, where
-L and D are the root's inference limit and deadline, and 1000 inferences and
-500 ms are the cleanup allowance described below. The root is the outermost
+One root query uses at most L + 1000 inferences and stops by D + 500 ms + P,
+where L and D are the root's inference limit and deadline, 1000 inferences
+and 500 ms are the cleanup allowance described below, and P is the time of
+the at most 256 inferences from one deadline check to the next, described
+for `*prolog-deadline*` above. The root is the outermost
 query running in a thread. The bound covers every query nested inside it,
 and holds whether a stop unwinds to the host, is replaced by a ball that a
 cleanup throws and `catch/3` catches, or is handled by host code that carries
 on. When the root has no limit or no deadline, the same bound holds for each
-nested query that sets one, with its own limit or deadline as L or D. Like
-the deadline itself, D + 500 ms can be overrun by a single long-running
-builtin call.
+nested query that sets one, with its own limit or deadline as L or D.
 
 A foreign predicate can start a nested query (another `query-prolog` or
 similar call) while one is running. Its inferences are charged to the root's
-count. If it passes neither `:max-inferences` nor `:deadline` (or passes
-`nil` for both), it runs under the enclosing limit and deadline, or under
-`*max-prolog-inferences*` and `*prolog-deadline*` when no enclosing query has
-either. Otherwise its own limit (the passed value, or
-`*max-prolog-inferences*`) counts from the inferences already used when it
-starts, its own deadline is the passed value or `*prolog-deadline*`, and each
-applies only where it is tighter than the enclosing one. Passing `nil` does
-not turn the enclosing limit or deadline off.
+count, and it always runs under the enclosing limit and deadline. A limit or
+deadline of its own applies as well, only where it is tighter than the
+enclosing one; its own limit counts from the inferences already used when it
+starts. A nested query therefore cannot raise or turn off the enclosing
+limit or deadline.
+
+Which bounds of its own a nested query has depends on what it passes. If the
+enclosing query has a limit or a deadline and the nested query passes
+neither `:max-inferences` nor `:deadline`, or `nil` for both, it has none,
+and the specials are not consulted. Otherwise each option is treated on its
+own: an option it does not pass takes `*max-prolog-inferences*` or
+`*prolog-deadline*`, an explicit `nil` gives it no bound of its own for that
+option, and any other value is its own bound.
 
 `prolog-inference-limit-exceeded` and `prolog-deadline-exceeded` are
 `prolog-resource-error` subclasses, but Prolog `catch/3` does not intercept

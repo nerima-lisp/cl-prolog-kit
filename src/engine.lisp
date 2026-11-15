@@ -26,10 +26,14 @@ enclosing one.")
 
 (defparameter *prolog-deadline* nil
   "Default absolute GET-INTERNAL-REAL-TIME deadline of a top-level query, or
-NIL for none.  A query still running at it raises PROLOG-DEADLINE-EXCEEDED.
-Cleanup goals together run at most 500 ms past it.  A query nested inside
-another cannot have a later deadline than the enclosing one.  See
-PROLOG-DEADLINE-AFTER.")
+NIL for none.  A query still running at it raises PROLOG-DEADLINE-EXCEEDED
+within at most 256 more inferences: the deadline is checked every 1 to 256
+inferences, an interval adapted so that checks are about 10 ms apart.  The
+time of one builtin call is bounded only by the builtin limits such as
+*MAX-PROLOG-BUILTIN-OUTPUT-LENGTH*.  Cleanup goals together run at most 500 ms
+past the deadline, with the interval restarted at 1 for each.  A query
+nested inside another cannot have a later deadline than the enclosing one.
+See PROLOG-DEADLINE-AFTER.")
 
 (defparameter *max-prolog-builtin-output-length* 1048576
   "Maximum number of characters or list elements a single builtin call may
