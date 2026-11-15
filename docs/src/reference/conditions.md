@@ -53,7 +53,10 @@ limits are counted and how nested queries share them.
 | `prolog-stack-limit-exceeded` | none   | A goal dispatch or a term walk finds that the query's thread has used 80% of its control stack. |
 
 It is a `prolog-resource-error` carrying `resource_error(control_stack)`, and
-Prolog `catch/3` intercepts it. See [Control stack](api.md#control-stack).
+Prolog `catch/3` intercepts it. A cleanup goal of `setup_call_cleanup/3` or
+`call_cleanup/2` stops at a ceiling up to 224 KiB past the 80% mark instead;
+when it runs while a stack already past the limit unwinds, that stop is
+discarded. See [Control stack](api.md#control-stack).
 
 ## Structurally invalid goals
 

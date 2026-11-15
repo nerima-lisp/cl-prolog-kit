@@ -295,7 +295,9 @@ whichever of its own and the enclosing bounds comes first."
                   (*inference-poll-at* 0)
                   (*inference-poll-interval* 1)
                   (*inference-last-poll* nil)
-                  (*control-stack-limit* (%control-stack-limit)))
+                  (*control-stack-limit* (%control-stack-limit))
+                  (*control-stack-ceiling*
+                    (%control-stack-ceiling (%control-stack-limit))))
               (%call-with-query-bounds limit deadline function))))))
 
 (defmacro %with-inference-limits ((max-inferences deadline) &body body)
@@ -305,11 +307,15 @@ whichever of its own and the enclosing bounds comes first."
 
 (defun %call-with-cleanup-inference-allowance (function)
   "Call FUNCTION, a cleanup goal, with the cap raised by one allowance and
-the deadline by one grace period, each bounded by its ceiling.  The goal
-gets them however the query left it: a stop leaves *INFERENCE-USED* at most
-at the cap it hit, so the cleanup can still run, and the code after the
-cleanup stops again at its next charge."
+the deadline by one grace period, each bounded by its ceiling, and with the
+control stack limit at the root's *CONTROL-STACK-CEILING*.  The goal gets
+them however the query left it: a stop leaves *INFERENCE-USED* at most at
+the cap it hit, so the cleanup can still run, and the code after the
+cleanup stops again at its next charge.  The stack limit is the ceiling
+itself, not the limit in force plus a margin, so a cleanup nested in a
+cleanup gets no more stack than the outer one."
   (let* ((cap *inference-cap*)
+         (*control-stack-limit* *control-stack-ceiling*)
          (deadline *inference-deadline*)
          (*inference-cap*
            (and cap (%min* (+ cap *inference-limit-cleanup-allowance*)

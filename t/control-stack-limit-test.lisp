@@ -113,3 +113,129 @@ Return the PROLOG-STACK-LIMIT-EXCEEDED it raised, or :FINISHED."
         :name "stack-limit-test"))
     (is (typep deep 'prolog-stack-limit-exceeded))
     (is-equal :finished shallow)))
+
+;;; Cleanup goals after a stack stop.  SBCL runs each unwind-protect cleanup
+;;; on top of the stack where the non-local exit started, so after a stop
+;;; every cleanup starts past the limit and runs within the cleanup margin.
+
+(defparameter +stack-cleanup-rules+
+  ":- dynamic(copied/1).
+lv(I) :- assertz(level(I)), I1 is I + 1, lv(I1).
+rec(N) :- setup_call_cleanup(assertz(opened(N)), (N1 is N + 1, rec(N1)),
+                             assertz(closed(N))).
+rec_deep(N) :- setup_call_cleanup(assertz(opened(N)),
+                                  (N1 is N + 1, rec_deep(N1)),
+                                  (assertz(closed(N)), deep(T), copy_term(T, _),
+                                   assertz(copied(N)))).")
+
+(defun stack-cleanup-count (rulebase text)
+  (length (query-prolog rulebase (read-prolog-term text))))
+
+(defun stack-cleanup-levels (text)
+  "Run TEXT under the test's stack fraction and return how many levels of
+lv/1 ran before the stop that TEXT catches."
+  (let ((rulebase (consult-prolog +stack-cleanup-rules+ (make-rulebase)))
+        (cl-prolog-kit::*control-stack-limit-fraction* +stack-test-fraction+))
+    (is-equal 1 (length (query-prolog rulebase (read-prolog-term text)
+                                      :max-inferences 10000000
+                                      :deadline (prolog-deadline-after 10)))
+              text)
+    (stack-cleanup-count rulebase "level(X).")))
+
+(deftest a-cleanup-gets-one-margin-however-cleanups-nest ()
+  ;; A cleanup run on normal exit recurses past the limit by the margin
+  ;; and stops with the resource error; a cleanup nested in it gets no
+  ;; more.  At about 1150 bytes a level, the 224 KiB margin is about 200
+  ;; levels.
+  (let ((plain (stack-cleanup-levels
+                "catch(lv(0), error(resource_error(control_stack), _), true)."))
+        (cleanup (stack-cleanup-levels
+                  "catch(setup_call_cleanup(true, true, lv(0)),
+                         error(resource_error(control_stack), _), true)."))
+        (nested (stack-cleanup-levels
+                 "catch(setup_call_cleanup(true, true,
+                          setup_call_cleanup(true, true, lv(0))),
+                        error(resource_error(control_stack), _), true).")))
+    (is (> plain 100) plain)
+    (is (< 100 (- cleanup plain) 400) (list plain cleanup))
+    (is (<= nested cleanup) (list cleanup nested))))
+
+(defun stack-cleanup-child-results (goals)
+  "Run each of GOALS in a child SBCL under --script, which ends the process
+on a guard page hit, with the shipped stack fraction.  Return the child's
+exit code, its output and, when it printed them, its stack fraction and one
+list of (SOLUTION-COUNT OPENED CLOSED COPIED) per goal.  The variable Deep in
+a goal stands for a term nested 4000 levels deep, too deep to copy within
+the cleanup margin and shallow enough for query entry, which walks it
+without the check."
+  (uiop:with-temporary-file (:stream stream :pathname script :type "lisp"
+                             :direction :output)
+    ;; The child reads this text after loading the system, so it names
+    ;; the system's symbols with their package and binds only CL-USER ones.
+    (format stream "(require :asdf)
+(asdf:load-asd ~S)
+(let ((*standard-output* (make-broadcast-stream))
+      (*error-output* (make-broadcast-stream)))
+  (asdf:load-system \"cl-prolog-kit\"))
+(defvar *deep* (let ((term 0))
+                 (dotimes (level 4000 term)
+                   (setf term (list (intern \"F\" \"CL-PROLOG-KIT.USER-ATOMS\")
+                                    term)))))
+(flet ((run (text)
+         (let ((rulebase (cl-prolog-kit:consult-prolog
+                          ~S (cl-prolog-kit:make-rulebase))))
+           (flet ((solutions (goal)
+                    (length (cl-prolog-kit:query-prolog rulebase goal)))
+                  (read-goal (text)
+                    (cl-prolog-kit:read-prolog-term text)))
+             (list (solutions (subst-if *deep*
+                                        (lambda (x)
+                                          (and (symbolp x)
+                                               (string= (symbol-name x) \"?DEEP\")))
+                                        (read-goal text)))
+                   (solutions (read-goal \"opened(X).\"))
+                   (solutions (read-goal \"closed(X).\"))
+                   (solutions (read-goal \"copied(X).\")))))))
+  (print (cons cl-prolog-kit::*control-stack-limit-fraction*
+               (mapcar #'run '~S))))
+"
+            (namestring (asdf:system-source-file "cl-prolog-kit"))
+            +stack-cleanup-rules+
+            goals)
+    :close-stream
+    (multiple-value-bind (output error-output code)
+        (uiop:run-program (list (namestring sb-ext:*runtime-pathname*)
+                                "--core" (namestring sb-ext:*core-pathname*)
+                                "--script" (namestring script))
+                          :output :string :error-output :string
+                          :ignore-error-status t)
+      (let ((printed (ignore-errors (read-from-string output))))
+        (values code
+                (concatenate 'string output error-output)
+                (car printed)
+                (cdr printed))))))
+
+(deftest cleanups-after-a-stack-stop-run-at-the-shipped-limit (:timeout 120)
+  ;; A child SBCL loads the system and runs about 2000 levels of proof
+  ;; search, so this takes longer than the default timeout.  Run at the
+  ;; shipped fraction, where before the cleanup margin the
+  ;; cleanups of rec/1 stopped again one on top of the other until SBCL
+  ;; ended the process.  Every cleanup runs at about the depth of the stop
+  ;; and fits in the margin, so each opened level is closed.  In rec_deep/1
+  ;; each cleanup then copies a term too deep for the margin and stops at
+  ;; the ceiling, so none reaches copied/1; that stop is dropped while the
+  ;; first one unwinds, so catch/3 still receives the resource error.
+  (multiple-value-bind (code output fraction results)
+      (stack-cleanup-child-results
+       '("catch(rec(0), error(resource_error(control_stack), _), true)."
+         "assertz(deep(Deep)),
+          catch(rec_deep(0), error(resource_error(control_stack), _), true)."))
+    (is-equal 0 code output)
+    (is-equal 4/5 fraction output)
+    (is-equal 2 (length results) output)
+    (loop for (solutions opened closed) in results
+          do (is-equal 1 solutions output)
+             ;; A quarter of the stack holds about 300 levels of rec/1.
+             (is (> opened 600) output)
+             (is-equal opened closed output))
+    (is-equal 0 (fourth (second results)) output)))

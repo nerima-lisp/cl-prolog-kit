@@ -172,7 +172,14 @@ SETUP_CALL_CLEANUP's cleanup goal can skip its choice-point bookkeeping.")
                         operation)
   "Commit to SETUP, stream GOAL's proofs, then run CLEANUP exactly once.
 
-CLEANUP failure is ignored, while a condition raised by CLEANUP propagates."
+CLEANUP failure is ignored, while a condition raised by CLEANUP propagates,
+with one exception.  SBCL runs the unwind-protect cleanup of a non-local exit
+on top of the stack where the exit started, and a condition the cleanup
+raises starts a new exit from deeper still, under which the next enclosing
+cleanup runs.  So when a non-local exit that started past the stack limit
+runs a cleanup that stops at the stack ceiling, that stop is dropped and the
+exit already under way continues; otherwise each of many nested cleanups
+would stop again a little deeper until SBCL's guard page ends the process."
   (multiple-value-bind (setup-environment setup-succeeded-p)
       (%first-proof-environment
        (%resolve-callable-goal setup environment operation)
@@ -180,25 +187,33 @@ CLEANUP failure is ignored, while a condition raised by CLEANUP propagates."
     (when setup-succeeded-p
       (let ((cleanup-environment setup-environment)
             (cleanup-ran-p nil)
+            (goal-returned-p nil)
             (deterministic-goal-p (%cleanup-goal-deterministic-p goal)))
-        (labels ((run-cleanup ()
+        (labels ((prove-cleanup ()
+                   (%with-cleanup-inference-allowance
+                     (%first-proof-environment
+                      (%resolve-callable-goal cleanup cleanup-environment
+                                              operation)
+                      rulebase cleanup-environment depth)))
+                 (run-cleanup (unwinding-p)
                    (unless cleanup-ran-p
                      (setf cleanup-ran-p t)
-                     (%with-cleanup-inference-allowance
-                       (%first-proof-environment
-                        (%resolve-callable-goal cleanup cleanup-environment
-                                                operation)
-                        rulebase cleanup-environment depth)))))
+                     (if (and unwinding-p (%control-stack-past-limit-p))
+                         (handler-case (prove-cleanup)
+                           (prolog-stack-limit-exceeded () nil))
+                         (prove-cleanup)))))
           (unwind-protect
-               (%prove-bindings/k
-                (%resolve-callable-goal goal setup-environment operation)
-                rulebase setup-environment depth
-                (lambda (goal-environment)
-                  (setf cleanup-environment goal-environment)
-                  (when deterministic-goal-p
-                    (run-cleanup))
-                  (funcall emit goal-environment)))
-            (run-cleanup)))))))
+               (multiple-value-prog1
+                   (%prove-bindings/k
+                    (%resolve-callable-goal goal setup-environment operation)
+                    rulebase setup-environment depth
+                    (lambda (goal-environment)
+                      (setf cleanup-environment goal-environment)
+                      (when deterministic-goal-p
+                        (run-cleanup nil))
+                      (funcall emit goal-environment)))
+                 (setf goal-returned-p t))
+            (run-cleanup (not goal-returned-p))))))))
 
 (define-builtin (setup_call_cleanup setup goal cleanup)
     (rulebase environment depth emit)

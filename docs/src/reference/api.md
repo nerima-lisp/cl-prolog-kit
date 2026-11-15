@@ -401,9 +401,36 @@ term walks that unification, the occurs check and term copying perform
 inside a builtin call. Past the limit, the check raises
 `prolog-stack-limit-exceeded`, a `prolog-resource-error` whose term is
 `error(resource_error(control_stack), _)`. Unlike the inference and deadline
-limits, `catch/3` intercepts it; by the time its recovery runs, the stack has
-unwound to the `catch/3`. A query in another thread is a root of its own and
-uses that thread's stack.
+limits, `catch/3` intercepts it. A query in another thread is a root of its own
+and uses that thread's stack.
+
+The stack unwinds to the `catch/3` only after the cleanups of the
+`setup_call_cleanup/3` and `call_cleanup/2` calls between the stop and the
+`catch/3` have run. SBCL runs each cleanup on top of the stack where the stop
+happened, so every one of them starts past the limit. A cleanup goal therefore
+runs under a ceiling instead of the limit: the root sets it once, 224 KiB past
+the limit but no closer than 32 KiB to SBCL's guard pages, and nested cleanups
+share it. Within 224 KiB, a cleanup goal can itself recurse about 200 levels
+of a rule that calls `assertz/1` and `is/2` on arm64 macOS. The cleanups do
+not stack on each other: each runs and returns before the next starts, at
+about the same depth. So after a stop in the following rule, which opens about
+1,000 levels at the default limit, every level that was opened is closed:
+
+```prolog
+rec(N) :-
+    setup_call_cleanup(assertz(opened(N)),
+                       (N1 is N + 1, rec(N1)),
+                       assertz(closed(N))).
+?- catch(rec(0), error(resource_error(control_stack), _), true).
+```
+
+A cleanup goal that reaches the ceiling stops with the same resource error,
+with one exception. If the cleanup runs because an exception (such as the
+stack error) or another exit that started past the limit is unwinding the
+stack, the cleanup's own resource error is discarded without any notice to
+Prolog or the host. The rest of that cleanup goal does not run, and the exit
+already under way continues to the next cleanup and the `catch/3`. Do not rely
+on such a cleanup finishing work that needs more stack than the ceiling allows.
 
 Some term walks do not go through that check. In v1.6.0 these known cases
 still end the process under `--script`; the sizes are for arm64 macOS with
