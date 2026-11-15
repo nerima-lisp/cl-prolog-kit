@@ -228,3 +228,27 @@ aux :- once(phrase(p, Y)), Y == [].")))
      (next-terminals-rulebase) (read-prolog-term "spin") '()
      :max-inferences 1000)
     "an error of the callback reaches the caller"))
+
+(define-foreign-predicate (next-terminals-nested-probe token)
+    (rulebase environment depth emit)
+  (declare (cl:ignore token depth))
+  (map-phrase-next-terminals
+   (lambda (kind value)
+     (declare (cl:ignore kind value))
+     (cl-prolog-kit::%raise-instantiation-error
+      nil (cl-prolog-kit::%iso-atom "CALLBACK") "raised by the inner callback"))
+   rulebase 'inner-word '())
+  (funcall emit environment))
+
+(deftest next-terminals-pass-on-errors-of-a-nested-probe-callback ()
+  ;; The inner probe re-signals its callback's error from inside the outer
+  ;; derivation, after the outer probe has read the tail.  The outer probe
+  ;; must not take it for a guard that cannot decide the unknown token.
+  (let ((rulebase (prolog ((outer-word ?s0 ?s)
+                           (= ?s0 (?x . ?s))
+                           (next-terminals-nested-probe ?x))
+                          ((inner-word ?s0 ?s)
+                           (= ?s0 (a . ?s))))))
+    (signals-prolog-condition prolog-instantiation-error
+      (phrase-next-terminals rulebase 'outer-word '())
+      "the inner callback's error reaches the caller")))

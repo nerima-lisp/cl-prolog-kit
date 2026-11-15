@@ -252,7 +252,13 @@ Returns NIL."
                 rulebase nonterminal prefix max-depth))
              nil)))
     (when callback-condition
-      (error callback-condition)))
+      ;; This call may itself run inside another probe's derivation, from a
+      ;; foreign predicate.  Signalled with that probe's phase still bound,
+      ;; FUNCTION's condition would pass for the derivation's own
+      ;; instantiation error and be absorbed there.
+      (let ((*phrase-probe* nil)
+            (*phrase-probe-phase* nil))
+        (error callback-condition))))
   nil)
 
 (defun phrase-next-terminals (rulebase nonterminal prefix &rest options
