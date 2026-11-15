@@ -211,24 +211,34 @@
 
 #+sb-thread
 (deftest snapshot-is-usable-from-another-thread-while-the-original-changes ()
+  ;; The reader signals STARTED after its first read and keeps reading until
+  ;; the writer signals DONE, so its read loop spans the whole mutation window.
   (let* ((original (%overlay-base-rulebase))
          (snapshot (rulebase-snapshot original))
          (rounds 200)
+         (started (sb-thread:make-semaphore))
+         (done (sb-thread:make-semaphore))
          (worker
            (sb-thread:make-thread
             (lambda ()
-              (loop repeat rounds
-                    do (let ((answers
-                               (%overlay-values snapshot '(item ?x) '?x)))
-                         (unless (equal answers '(base1 base2))
-                           (return answers)))
-                    finally (return :consistent)))
+              (loop for reads from 1
+                    for answers = (%overlay-values snapshot '(item ?x) '?x)
+                    when (= reads 1)
+                      do (sb-thread:signal-semaphore started)
+                    unless (equal answers '(base1 base2))
+                      return answers
+                    when (sb-thread:try-semaphore done)
+                      return (list :consistent reads)))
             :name "overlay-snapshot-reader")))
+    (sb-thread:wait-on-semaphore started)
     (loop for index below rounds
           do (rulebase-insert-clause! original (make-clause (list 'item index)))
              (prolog-succeeds-p original '(retract (item base1)))
              (prolog-succeeds-p original '(assertz (item base1))))
-    (is (eq :consistent (sb-thread:join-thread worker)))
+    (sb-thread:signal-semaphore done)
+    (let ((result (sb-thread:join-thread worker)))
+      (is (eq :consistent (first result)))
+      (is (and (eq :consistent (first result)) (<= 2 (second result)))))
     (is-equal (+ 2 rounds)
               (length (query-prolog original '(item ?x))))))
 
