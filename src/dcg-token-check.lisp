@@ -149,8 +149,8 @@ succeeds, before its search is exhausted."
                                (max-inferences *max-prolog-inferences*
                                 max-inferences-p)
                                (deadline *prolog-deadline* deadline-p))
-  "True unless no input that starts with PREFIX followed by TOKEN is a
-phrase of NONTERMINAL.
+  "Return NIL only when no phrase of NONTERMINAL starts with PREFIX followed
+by TOKEN.
 
 TOKEN is a concrete token in the representation PREFIX uses.  True does not
 promise that a phrase exists: the check accepts once the derivation reads
@@ -166,10 +166,11 @@ a limit signals its condition."
                                    (max-inferences *max-prolog-inferences*
                                     max-inferences-p)
                                    (deadline *prolog-deadline* deadline-p))
-  "Return the elements of CANDIDATES, in order, for which
-PHRASE-TOKEN-VALID-P holds after PREFIX.
+  "Return the elements of CANDIDATES, in order, that PHRASE-TOKEN-VALID-P
+does not reject after PREFIX.
 
-The limits bound the checks of all candidates together."
+MAX-INFERENCES and DEADLINE bound the checks of all candidates together;
+MAX-DEPTH bounds each one."
   (unless (%proper-list-p candidates)
     (error 'type-error :datum candidates :expected-type 'list))
   (%with-token-check-options (max-depth max-inferences max-inferences-p

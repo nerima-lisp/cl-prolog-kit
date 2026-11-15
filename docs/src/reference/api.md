@@ -692,20 +692,23 @@ DCG tokens are either a bare token-kind symbol or a `(kind . value)` cons.
 
 ### Checking a typed token
 
-Two functions check tokens that may follow a token list `prefix` a user has
-typed so far:
+Two functions check tokens that may follow `prefix`, the list of tokens a
+user has typed so far:
 
 - `(phrase-token-valid-p rulebase nonterminal prefix token &key max-depth max-inferences deadline)`
-  returns false when no input that starts with `prefix` followed by `token`
-  is a phrase of `nonterminal`, and true otherwise.
+  returns `nil` only when no phrase of `nonterminal` starts with `prefix`
+  followed by `token`. A true result does not guarantee that one does.
 - `(phrase-filter-candidates rulebase nonterminal prefix candidates &key max-depth max-inferences deadline)`
-  returns the elements of `candidates`, in order, for which
-  `phrase-token-valid-p` is true. The caller supplies the candidates, for
-  example the flags and subcommands it knows, and the limits bound all the
-  checks together.
+  returns the elements of `candidates`, in order, that
+  `phrase-token-valid-p` does not reject. The caller supplies the candidates, for
+  example the flags and subcommands it knows. `:max-inferences` and
+  `:deadline` bound all the checks together; `:max-depth` bounds each one.
 
-`nonterminal` is a term such as `(read-prolog-term "git")`. `prefix` and
-`candidates` must be proper lists, otherwise `type-error` is signalled.
+`nonterminal` is a term such as `(read-prolog-term "git")`, or the rule's
+symbol for a `def-dcg-rule` grammar. `prefix` and `candidates` must be
+proper lists, otherwise `type-error` is signalled. Build an atom from a
+typed word with `prolog-atom` (see [Atoms](#atoms)); `read-prolog-term`
+reads `Feature` as a variable.
 
 ```lisp
 (defparameter *git*
@@ -741,14 +744,16 @@ git_branch(dev)."))
   `(:name . "bob")` does.
 - A false result is a sound rejection: the token can be marked invalid.
 - A true result is not a promise that a phrase exists. The check runs the
-  grammar on `prefix ++ [token|R]` and accepts as soon as a goal starts
-  while `R` is bound, `R` reaches a builtin or foreign predicate other than
-  those listed below, or the derivation succeeds. Guards on later tokens are
+  grammar on `prefix ++ [token|R]` and accepts as soon as a goal is called
+  while `R` is bound, `R` occurs in the arguments of a builtin or foreign
+  predicate other than those listed below, or the derivation succeeds. Guards on later tokens are
   not run, so the result over-accepts: with `oa --> [a], [_], {fail}.` the
   token `a` is accepted though no input is a phrase. Touching `R` inside a
   negation, a solution collection or `catch/3` (`\+`, `forall/2`,
   `findall/3`, `bagof/3`, `setof/3`, `aggregate_all/3`, `catch/3`,
-  `setup_call_cleanup/3`, `call_cleanup/2`) also accepts.
+  `setup_call_cleanup/3`, `call_cleanup/2`) also accepts, and so does a
+  `def-dcg-rule` grammar that reaches the token through `dcg-star`,
+  `dcg-plus` or `dcg-error-recovery`: it accepts every token there.
 - An exception from the check is not a judgement on the token. A grammar
   error that escapes the check, such as calling an unbound goal before the
   token is read, reaches the caller as a condition, never as a false result.
@@ -763,27 +768,26 @@ arguments: `=`, `call/N`, conjunction, disjunction, `true`, `fail`,
 `phrase/2,3` and the `def-dcg-rule` matchers `dcg-token-match`,
 `dcg-token-match-value`, `dcg-alt` and `dcg-opt`. It also runs `once/1`,
 `ignore/1`, `->`, `*->` and if-then-else as usual, because they pass their
-inner goal's bindings on, and the goals inside them are checked in turn. A
-negation or a solution collection drops its inner goal's bindings and
-decides its result without starting another goal, and `catch/3` does the
-same when its goal raises, so a binding of `R` inside them would go
-unseen; the check accepts instead. All of
-these are recognized by their solver, so a foreign predicate with one of
-these names is not. Each check uses its own table session, so tables built
+inner goal's bindings on, and the goals inside them are checked in turn.
+All of these are recognized by their solver, so a foreign predicate with
+one of these names is not treated as the builtin. Each check uses its own table session, so tables built
 while checking are not reused by later queries.
 
 The checks run under the limits of
 [Inference budget and deadline](#inference-budget-and-deadline), with the
 options above and the specials `*max-prolog-depth*`,
 `*max-prolog-inferences*` and `*prolog-deadline*`. Reaching a limit signals
-`prolog-inference-limit-exceeded` or `prolog-deadline-exceeded`. Pass a
-deadline when the grammar comes from a source you do not control.
+`prolog-inference-limit-exceeded` or `prolog-deadline-exceeded`;
+`phrase-filter-candidates` then returns nothing, not even the candidates
+it already checked. Pass a deadline when
+the grammar comes from a source you do not control.
 
 #### Writing grammars for checking
 
 - Put guards on a token directly after the terminal that reads it, before
   the next terminal; guards after the next terminal are not run.
-- Express mutually exclusive options as guards on a parse-state argument:
+- Express mutually exclusive options as guards on a parse-state argument,
+  which holds no tokens after the checked one, so the negation runs:
   `{flag(F), \+ memberchk(F, Seen)}`.
 - Keep grammars free of side effects (`assert`, I/O, global variables): the
   check stops a derivation at an arbitrary point.

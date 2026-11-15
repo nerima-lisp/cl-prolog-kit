@@ -76,8 +76,8 @@ Usable as goals inside a grammar body:
 | `def-dcg-rule`           | Compile a grammar body into a two-stream rule.             |
 | `phrase`                 | `(phrase rulebase rule-name input)` → `(values remainder matched-p)` for the first parse. |
 | `phrase-all`             | `(phrase-all rulebase rule-name input)` → the remainders of every parse. |
-| `phrase-token-valid-p`   | Whether a typed token can continue a partial input. See [Checking a typed token](../reference/api.md#checking-a-typed-token). |
-| `phrase-filter-candidates` | The caller-supplied candidates that can continue a partial input. See [Checking a typed token](../reference/api.md#checking-a-typed-token). |
+| `phrase-token-valid-p`   | Rejects a typed token when no phrase starts with the tokens typed so far followed by it; a true result may over-accept. See [Checking a typed token](../reference/api.md#checking-a-typed-token). |
+| `phrase-filter-candidates` | The caller-supplied candidates that `phrase-token-valid-p` does not reject. See [Checking a typed token](../reference/api.md#checking-a-typed-token). |
 | `dcg-alt` … `dcg-error-recovery` | Combinators usable as goals.                       |
 | `dcg-token-match`        | Match a token kind.                                        |
 | `dcg-token-match-value`  | Match a token kind and value.                              |
