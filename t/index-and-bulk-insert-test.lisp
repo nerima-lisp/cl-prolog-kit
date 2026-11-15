@@ -352,6 +352,60 @@
     (is (not called))
     (is-equal before (%insert-failure-observation rulebase))))
 
+;;; A regression would make LENGTH loop on the cycle, so each cyclic case runs
+;;; under a timeout, and assertions compare only acyclic values: a failure
+;;; report printing a cyclic term would not terminate either.
+(defun %outcome-within-timeout (thunk)
+  "Return :SIGNALLED, :RETURNED, or :TIMED-OUT for calling THUNK."
+  (handler-case (sb-ext:with-timeout 5 (funcall thunk) :returned)
+    (sb-ext:timeout () :timed-out)
+    (error () :signalled)))
+
+(defun %circular-head-clause ()
+  (let ((head (list 'bulk 'alpha)))
+    (setf (cddr head) (cdr head))
+    (make-clause head)))
+
+(deftest inserts-reject-circular-clause-heads ()
+  (dolist (position '(:first :last))
+    (let* ((rulebase (%bulk-base-rulebase))
+           (before (%insert-failure-observation rulebase)))
+      (is-equal :signalled
+                (%outcome-within-timeout
+                 (lambda ()
+                   (rulebase-insert-clause! rulebase (%circular-head-clause)
+                                            :position position))))
+      (is-equal before (%insert-failure-observation rulebase))
+      (is-equal :signalled
+                (%outcome-within-timeout
+                 (lambda ()
+                   (rulebase-insert-clauses!
+                    rulebase
+                    (list (make-clause '(bulk alpha 9)) (%circular-head-clause))
+                    :position position))))
+      (is-equal before (%insert-failure-observation rulebase)))))
+
+(deftest assertz-of-a-circular-head-raises-a-type-error ()
+  (dolist (source '("H = [p|H], catch(assertz(H), error(type_error(T, _), _), true)"
+                    "H = [p|H], catch(assertz((H :- true)), error(type_error(T, _), _), true)"
+                    "L = [a|L], catch(asserta([p|L]), error(type_error(T, _), _), true)"))
+    (let* ((rulebase (make-rulebase))
+           (kind :unset))
+      (is (prolog-succeeds-p
+           rulebase (read-prolog-term "set_prolog_flag(occurs_check, false)")))
+      (is-equal :returned
+                (%outcome-within-timeout
+                 (lambda ()
+                   (setf kind
+                         (cdr (find "?T"
+                                    (first (query-prolog
+                                            rulebase (read-prolog-term source)))
+                                    :key (lambda (binding)
+                                           (symbol-name (car binding)))
+                                    :test #'string=))))))
+      (is-equal "callable" (and (symbolp kind) (prolog-atom-text kind)))
+      (is-equal 0 (length (rulebase-visible-clauses rulebase))))))
+
 (deftest bulk-insert-keeps-the-logical-update-view ()
   (dolist (position '(:first :last))
     (let ((rulebase

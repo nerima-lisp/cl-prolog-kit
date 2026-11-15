@@ -49,10 +49,17 @@ compound EQ table likewise maps each functor symbol to its text's arity alist."
   (compound-fallback-entries (quote ()) :type list :read-only t))
 
 (defun %stored-clause-predicate-key (entry)
-  "Return ENTRY's (module predicate arity) key, or NIL for a malformed head."
+  "Return ENTRY's (module predicate arity) key, or NIL for a head with no functor.
+Signals an error when the argument list is dotted or circular.  LENGTH does not
+return on a circular list, so LIST-LENGTH detects the cycle, and the error names
+only the functor because printing the head itself would not terminate either."
   (let ((head (clause-head (%stored-clause-clause entry))))
     (when (and (consp head) (symbolp (first head)))
-      (list (%stored-clause-module entry) (first head) (length (rest head))))))
+      (let ((arity (list-length (rest head))))
+        (unless arity
+          (error "The clause head for ~S has a circular argument list."
+                 (first head)))
+        (list (%stored-clause-module entry) (first head) arity)))))
 
 (defun %append-to-predicate-index-tail! (key entry index tails)
   "Append ENTRY to KEY's bucket in INDEX using TAILS in O(1)."
