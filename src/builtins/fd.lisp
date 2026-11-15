@@ -120,6 +120,7 @@ variable first, UP/DOWN fix the domain-enumeration direction.")
             (%raise-instantiation-error environment context
                                         "every labeling variable needs a finite domain"))
           (dolist (value (if (%fd-option-p "DOWN" options) (reverse domain) domain))
+            (%count-inference)
             (let ((next-environment (unify variable value environment)))
               (when next-environment
                 (multiple-value-bind (next-store successp)

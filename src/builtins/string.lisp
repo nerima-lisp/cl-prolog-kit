@@ -128,7 +128,8 @@ MAKE-RESULT wraps a CL string as the emitted term (string or atom)."
            (t
             ;; both ends unbound: enumerate every split point.
             (loop for split from 0 to (length whole-text)
-                  do (%term-unify-sequence
+                  do (%count-inference)
+                     (%term-unify-sequence
                       (list (cons left (funcall make-result (subseq whole-text 0 split)))
                             (cons right (funcall make-result (subseq whole-text split))))
                       environment emit)))))))))
@@ -167,8 +168,9 @@ MAKE-RESULT wraps a CL string as the emitted term (string or atom)."
          (let* ((piece (%text-of resolved-sub environment operation))
                 (l (length piece)))
            (loop for b from 0 to (- total l)
-                 when (string= piece text :start2 b :end2 (+ b l))
-                   do (emit-slice b l))))
+                 do (%count-inference)
+                    (when (string= piece text :start2 b :end2 (+ b l))
+                      (emit-slice b l)))))
         ;; before and length both known.
         ((and (integerp resolved-before) (integerp resolved-length))
          (when (and (<= 0 resolved-before) (<= 0 resolved-length)
@@ -179,8 +181,10 @@ MAKE-RESULT wraps a CL string as the emitted term (string or atom)."
          (loop for b from 0 to total
                when (or (not (integerp resolved-before)) (= b resolved-before))
                  do (loop for l from 0 to (- total b)
-                          when (or (not (integerp resolved-length)) (= l resolved-length))
-                            do (emit-slice b l))))))))
+                          do (%count-inference)
+                             (when (or (not (integerp resolved-length))
+                                       (= l resolved-length))
+                               (emit-slice b l)))))))))
 
 ;;; split_string/4
 

@@ -120,6 +120,7 @@
            (%operator-specifier specifier environment operation :allow-variable t))
          (resolved-name (%operator-name-filter name environment operation)))
     (dolist (definition (%operator-table-current (rulebase-operator-table rulebase)))
+      (%count-inference)
       (when (%operator-definition-matches-p
              definition resolved-priority resolved-specifier resolved-name)
         (%emit-operator-definition
@@ -170,7 +171,8 @@ enumerating and failing to unify would report it as an ordinary no."
              (rulebase-char-conversions rulebase))
     (setf pairs (sort pairs #'char< :key #'car))
     (loop for (from-character . to-character) in pairs
-          do (%unify-emit from (%character-atom from-character) environment
+          do (%count-inference)
+             (%unify-emit from (%character-atom from-character) environment
                           (lambda (from-environment)
                             (%unify-emit to (%character-atom to-character)
                                          from-environment emit))))))

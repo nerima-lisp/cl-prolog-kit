@@ -152,6 +152,7 @@ format builtins to cap attacker-controlled allocation."
             environment operation
             "permutation/2 requires one proper-list argument")))
     (labels ((permute (remaining accumulator current-environment)
+               (%count-inference)
                (if (null remaining)
                    (%unify-emit result-variable (reverse accumulator)
                                 current-environment emit)

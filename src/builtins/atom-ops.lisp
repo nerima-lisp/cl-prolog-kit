@@ -57,7 +57,8 @@
              "ATOM_CANDIDATES" environment operation
              "atom_concat/3 candidate count exceeds the configured limit")
             (loop for split from 0 to whole-size
-                  do (%term-unify-sequence
+                  do (%count-inference)
+                     (%term-unify-sequence
                       (list
                        (cons left
                              (%text-atom
@@ -120,6 +121,7 @@
       (labels ((bound-integer-matches-p (value candidate)
                  (or (logic-var-p value) (= value candidate)))
                (emit-candidate (candidate-before candidate-length)
+                 (%count-inference)
                  (let ((candidate-after
                          (- size candidate-before candidate-length)))
                    (when

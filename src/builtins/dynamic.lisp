@@ -39,6 +39,7 @@
     (multiple-value-bind (snapshot entries) (%rulebase-snapshot rulebase)
       (declare (cl:ignore snapshot))
       (dolist (entry entries)
+        (%count-inference)
         (when (eq (%stored-clause-module entry) *current-prolog-module*)
           (let* ((clause-entry (%stored-clause-clause entry))
                  (fresh (%freshen-dynamic-clause clause-entry))
@@ -59,6 +60,7 @@
       (declare (cl:ignore snapshot))
       (let ((matches '()))
         (dolist (entry entries)
+          (%count-inference)
           (when (eq (%stored-clause-module entry) *current-prolog-module*)
             (let* ((fresh (%freshen-dynamic-clause (%stored-clause-clause entry)))
                    (stored (%dynamic-pattern-clause-term fresh prolog-shape-p)))
@@ -123,6 +125,7 @@ indicator to T for O(1) membership checks."
       (if (or (logic-var-p resolved)
               (%term-has-variables-p resolved))
           (dolist (candidate (nreverse indicators))
+            (%count-inference)
             (%unify-emit indicator candidate environment emit))
           (progn
             ;; ISO 13211-1 8.8.2 enumerates the *user-defined* procedures, so a
@@ -269,6 +272,7 @@ indicator to T for O(1) membership checks."
                                :permission-type "PRIVATE_PROCEDURE")
     (dolist (entry (%rulebase-module-entries
                     rulebase *current-prolog-module*))
+      (%count-inference)
       (let ((fresh (%freshen-dynamic-clause (%stored-clause-clause entry))))
         (multiple-value-bind (head-environment head-ok)
             (unify callable (%entry-head fresh) environment)

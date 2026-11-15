@@ -320,3 +320,113 @@ heavy."
     (is (limits-test-condition (prolog-inference-limit-exceeded)
           (consult-prolog ":- initialization((repeat, fail))."
                           (make-rulebase))))))
+
+;;; Candidate-generating builtins charge one inference per candidate they
+;;; examine, so a search whose candidates all fail stops at the budget even
+;;; though it never reaches a solution.  Each query below is one builtin
+;;; call; without the per-candidate charge it would either run forever or
+;;; finish its fruitless scan on a budget of two inferences.
+
+(defparameter *limits-test-long-list* (make-list 300 :initial-element 'a))
+
+(defparameter *limits-test-long-text* (make-string 1001 :initial-element #\a))
+
+(defun limits-test-fruitless-search-stopped-p (rulebase query budget)
+  "Return true when QUERY (Prolog text or a term) raises
+PROLOG-INFERENCE-LIMIT-EXCEEDED under BUDGET and a short deadline."
+  (let ((term (if (stringp query) (read-prolog-term query) query)))
+    (handler-case
+        (progn (query-prolog rulebase term
+                             :max-inferences budget
+                             :deadline (prolog-deadline-after 1/2))
+               nil)
+      (prolog-inference-limit-exceeded () t))))
+
+(defmacro deftest-fruitless-search (name (&optional (rulebase '(make-rulebase)))
+                                    &body queries)
+  "Define test NAME asserting that each (QUERY BUDGET) stops at its budget."
+  `(deftest ,name ()
+     (dolist (spec (list ,@(mapcar (lambda (query) `(list ,@query)) queries)))
+       (destructuring-bind (query budget) spec
+         (is (limits-test-fruitless-search-stopped-p ,rulebase query budget)
+             (format nil "~S must stop at its budget" query))))))
+
+(deftest-fruitless-search length-stops-a-fruitless-search ()
+  ("length(L, L)." 10))
+
+(deftest-fruitless-search append-stops-a-fruitless-search ()
+  ("append(X, [a], X)." 200))
+
+(deftest fruitless-length-and-append-stop-at-a-deadline-alone ()
+  (dolist (query '("length(L, L)." "append(X, [a], X)."))
+    (is (limits-test-condition (prolog-deadline-exceeded)
+          (limits-test-query (make-rulebase) query
+                             :deadline (prolog-deadline-after 1/10))))))
+
+(deftest-fruitless-search list-scans-stop-a-fruitless-search ()
+  ((list 'cl-prolog-kit::member 'z *limits-test-long-list*) 50)
+  ((list 'cl-prolog-kit::memberchk 'z *limits-test-long-list*) 50)
+  ((list 'cl-prolog-kit::select 'z *limits-test-long-list* '?rest) 50)
+  ((list 'cl-prolog-kit::nth0 '?index *limits-test-long-list* 'z) 50)
+  ((list 'cl-prolog-kit::nth1 '?index *limits-test-long-list* 'z) 50)
+  ((list 'cl-prolog-kit::last *limits-test-long-list* 'z) 50))
+
+(deftest-fruitless-search permutation-stops-a-fruitless-search ()
+  ("permutation([1,2,3,4,5,6,7,8], [9,9,9,9,9,9,9,9])." 200))
+
+(deftest-fruitless-search text-splitting-stops-a-fruitless-search ()
+  ;; An odd-length text has no split into two equal halves.
+  ((list 'cl-prolog-kit::atom_concat '?x '?x (intern *limits-test-long-text* :cl-prolog-kit.user-atoms))
+   200)
+  ((list 'cl-prolog-kit::string_concat '?x '?x *limits-test-long-text*) 200)
+  ((list 'cl-prolog-kit::text_concat '?x '?x *limits-test-long-text*) 200)
+  ((list 'cl-prolog-kit::sub_atom (intern *limits-test-long-text* :cl-prolog-kit.user-atoms)
+         '?before '?length '?after 'zz)
+   200)
+  ((list 'cl-prolog-kit::sub_string *limits-test-long-text* '?before '?length '?after "zz")
+   200))
+
+(defun limits-test-many-facts ()
+  (consult-prolog
+   (with-output-to-string (out)
+     (format out ":- dynamic(f/1).~%")
+     (dotimes (index 100) (format out "f(~D).~%" index)))
+   (make-rulebase)))
+
+(deftest-fruitless-search database-scans-stop-a-fruitless-search
+    ((limits-test-many-facts))
+  ("retract(f(none))." 20)
+  ("retractall(f(none))." 20)
+  ("clause(f(none), B)." 20))
+
+(defun limits-test-in-memory-rulebase ()
+  "Return a rulebase whose standard streams are in memory: stream_property/2
+on a terminal user_input can block reading it."
+  (let ((*standard-input* (make-string-input-stream ""))
+        (*standard-output* (make-string-output-stream))
+        (*error-output* (make-broadcast-stream)))
+    (make-rulebase)))
+
+(deftest-fruitless-search reflection-stops-a-fruitless-search
+    ((limits-test-in-memory-rulebase))
+  ("current_predicate(no_such_predicate/_)." 50)
+  ("current_op(P, T, no_such_operator)." 10)
+  ("stream_property(S, alias(no_such_alias))." 5))
+
+(deftest current-char-conversion-stops-a-fruitless-search ()
+  (let ((rulebase (make-rulebase)))
+    (loop for code from (char-code #\a) to (char-code #\z)
+          do (limits-test-query rulebase
+                                (format nil "char_conversion('~C', '~C')."
+                                        (code-char code)
+                                        (char-upcase (code-char code)))))
+    (is (limits-test-fruitless-search-stopped-p
+         rulebase "current_char_conversion('0', X)." 10))))
+
+(deftest-fruitless-search fd-labeling-stops-a-fruitless-search ()
+  ;; Bounds propagation does not see that X + Y cannot reach 1000, so
+  ;; labeling tries every value of X; unbounded, this takes seconds.
+  ('(and (in (?x ?y) (1 |..| 300)) (|#=| (+ ?x ?y) 1000) (labeling () (?x ?y)))
+   200)
+  ;; X * X = 2 fails for every value, so indomain/1 finds no solution.
+  ('(and (in ?x (1 |..| 300)) (|#=| (* ?x ?x) 2) (indomain ?x)) 200))

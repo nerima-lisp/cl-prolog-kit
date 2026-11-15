@@ -302,6 +302,7 @@ ISO atom naming this predicate."
           (unify stream (%io-public-designator entry) environment)
         (when stream-ok
           (dolist (candidate (%io-stream-properties entry environment operation))
+            (%count-inference)
             (multiple-value-bind (extended ok)
                 (unify property candidate stream-environment)
               (when ok (funcall emit extended)))))))))

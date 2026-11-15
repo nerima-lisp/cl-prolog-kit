@@ -25,6 +25,7 @@ BODY."
 (define-builtin (member item list-term) (rulebase environment depth emit)
   (let ((seen (make-hash-table :test #'eq)))
     (labels ((visit (tail current-environment)
+               (%count-inference)
                (%unless-cyclic-list-cell (resolved tail current-environment seen)
                  (let ((head (fresh-logic-variable "?MEMBER-HEAD"))
                        (rest (fresh-logic-variable "?MEMBER-TAIL")))
@@ -39,6 +40,7 @@ BODY."
 (define-builtin (memberchk item list-term) (rulebase environment depth emit)
   (let ((seen (make-hash-table :test #'eq)))
     (labels ((visit (tail current-environment)
+               (%count-inference)
                (%unless-cyclic-list-cell (resolved tail current-environment seen)
                  (let ((head (fresh-logic-variable "?MEMBERCHK-HEAD"))
                        (rest (fresh-logic-variable "?MEMBERCHK-TAIL")))
@@ -56,6 +58,7 @@ BODY."
 (define-builtin (select item list-term rest-term)
     (rulebase environment depth emit)
   (labels ((visit (tail prefix current-environment seen)
+             (%count-inference)
              (let ((resolved (%walk-term tail current-environment)))
                (unless (and (consp resolved) (gethash resolved seen))
                  (let ((head (fresh-logic-variable "?SELECT-HEAD"))
@@ -82,6 +85,7 @@ BODY."
                               "The list index"
                               :minimum offset :allow-variable t)
     (labels ((visit (tail position current-environment)
+               (%count-inference)
                (%unless-cyclic-list-cell (resolved tail current-environment seen)
                  (let ((head (fresh-logic-variable "?NTH-HEAD"))
                        (rest (fresh-logic-variable "?NTH-TAIL")))
@@ -108,6 +112,7 @@ BODY."
 (define-builtin (last list-term item) (rulebase environment depth emit)
   (let ((seen (make-hash-table :test #'eq)))
     (labels ((visit (tail current-environment)
+               (%count-inference)
                (%unless-cyclic-list-cell (resolved tail current-environment seen)
                  (let ((head (fresh-logic-variable "?LAST-HEAD"))
                        (rest (fresh-logic-variable "?LAST-TAIL")))
@@ -134,6 +139,7 @@ BODY."
 (define-builtin (append left right result) (rulebase environment depth emit)
   (let ((seen (make-hash-table :test #'eq)))
     (labels ((join (left-tail result-tail current-environment)
+               (%count-inference)
                (%unless-cyclic-list-cell
                    (resolved left-tail current-environment seen)
                  ;; append([], Ys, Ys).
@@ -168,6 +174,7 @@ BODY."
     (%require-bounded-integer length-value environment operation
                               "length/2 length" :allow-variable t)
     (labels ((measure (tail count current-environment)
+               (%count-inference)
                (let ((resolved-tail (%walk-term tail current-environment)))
                  (unless (and (consp resolved-tail)
                               (gethash resolved-tail seen))
