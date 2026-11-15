@@ -135,15 +135,37 @@
                   (multiple-value-bind (reference present-p) (gethash term conses)
                     (if present-p
                         reference
-                        (let* ((identifier (fill-pointer cons-cars))
-                               (reference (%make-clause-template-reference :cons identifier)))
-                          (setf (gethash term conses) reference)
-                          (vector-push-extend nil cons-cars)
-                          (vector-push-extend nil cons-cdrs)
-                          (setf (aref cons-cars identifier) (encode (car term))
-                                (aref cons-cdrs identifier) (encode (cdr term)))
+                        (let ((reference (register-cons term)))
+                          ;; Recurse on cars only and walk the cdr spine in
+                          ;; place.  Identifiers are still assigned in the
+                          ;; car-before-cdr preorder the recursive form used.
+                          (loop with cell = term
+                                with identifier = (%clause-template-reference-value
+                                                   reference)
+                                do (setf (aref cons-cars identifier) (encode (car cell)))
+                                   (let ((next (cdr cell)))
+                                     (multiple-value-bind (next-reference seen-p)
+                                         (and (consp next) (gethash next conses))
+                                       (cond
+                                         ((or (not (consp next)) seen-p)
+                                          (setf (aref cons-cdrs identifier)
+                                                (if seen-p next-reference (encode next)))
+                                          (return))
+                                         (t
+                                          (let ((fresh (register-cons next)))
+                                            (setf (aref cons-cdrs identifier) fresh
+                                                  identifier (%clause-template-reference-value
+                                                              fresh)
+                                                  cell next)))))))
                           reference))))
-                 (t (%make-clause-template-reference :literal term)))))
+                 (t (%make-clause-template-reference :literal term))))
+             (register-cons (term)
+               (let* ((identifier (fill-pointer cons-cars))
+                      (reference (%make-clause-template-reference :cons identifier)))
+                 (setf (gethash term conses) reference)
+                 (vector-push-extend nil cons-cars)
+                 (vector-push-extend nil cons-cdrs)
+                 reference)))
       (let ((head (encode (clause-head clause)))
             (body (encode (clause-body clause))))
         (%make-clause-template next-variable
@@ -154,7 +176,45 @@
 
 (defun %make-clause-template-materialization-context (template) (let* ((variable-count (%clause-template-variable-count template)) (variables (make-array variable-count)) (conses (make-array (length (%clause-template-cons-cars template)) :initial-element nil))) (dotimes (index variable-count) (setf (svref variables index) (fresh-logic-variable))) (%make-clause-materialization-context template variables conses)))
 
-(defun %materialize-clause-template-reference (reference context) (ecase (%clause-template-reference-kind reference) (:literal (%clause-template-reference-value reference)) (:variable (svref (%clause-materialization-context-variables context) (%clause-template-reference-value reference))) (:cons (let* ((index (%clause-template-reference-value reference)) (conses (%clause-materialization-context-conses context)) (existing (svref conses index))) (or existing (let* ((template (%clause-materialization-context-template context)) (cell (cons nil nil))) (setf (svref conses index) cell (car cell) (%materialize-clause-template-reference (svref (%clause-template-cons-cars template) index) context) (cdr cell) (%materialize-clause-template-reference (svref (%clause-template-cons-cdrs template) index) context)) cell))))))
+(defun %materialize-clause-template-reference (reference context)
+  (ecase (%clause-template-reference-kind reference)
+    (:literal (%clause-template-reference-value reference))
+    (:variable
+     (svref (%clause-materialization-context-variables context)
+            (%clause-template-reference-value reference)))
+    (:cons
+     (let* ((index (%clause-template-reference-value reference))
+            (conses (%clause-materialization-context-conses context))
+            (existing (svref conses index)))
+       (or existing
+           (let* ((template (%clause-materialization-context-template context))
+                  (cars (%clause-template-cons-cars template))
+                  (cdrs (%clause-template-cons-cdrs template))
+                  (head (cons nil nil)))
+             (setf (svref conses index) head)
+             ;; Recurse on cars only; walk the cdr chain of cons references in
+             ;; place so a long list needs no stack depth.
+             (loop with cell = head
+                   do (setf (car cell)
+                            (%materialize-clause-template-reference
+                             (svref cars index) context))
+                      (let ((next (svref cdrs index)))
+                        (if (not (eq (%clause-template-reference-kind next) :cons))
+                            (progn
+                              (setf (cdr cell)
+                                    (%materialize-clause-template-reference
+                                     next context))
+                              (return))
+                            (let* ((next-index (%clause-template-reference-value next))
+                                   (shared (svref conses next-index)))
+                              (if shared
+                                  (progn (setf (cdr cell) shared) (return))
+                                  (let ((fresh (cons nil nil)))
+                                    (setf (svref conses next-index) fresh
+                                          (cdr cell) fresh
+                                          cell fresh
+                                          index next-index)))))))
+             head))))))
 
 (defun %materialize-clause-template-head (template context) (%materialize-clause-template-reference (%clause-template-head template) context))
 
@@ -173,11 +233,27 @@ its own string cannot change the copy."
                       (gethash term copies)
                     (if present-p
                         copy
-                        (let ((copy (cons nil nil)))
-                          (setf (gethash term copies) copy
-                                (car copy) (copy-term (car term))
-                                (cdr copy) (copy-term (cdr term)))
-                          copy))))
+                        (let ((head (cons nil nil)))
+                          (setf (gethash term copies) head)
+                          ;; Recurse on cars only; walk the cdr spine in place.
+                          (loop with cell = head
+                                with source = term
+                                do (setf (car cell) (copy-term (car source)))
+                                   (let ((next (cdr source)))
+                                     (if (not (consp next))
+                                         (progn (setf (cdr cell) (copy-term next))
+                                                (return))
+                                         (multiple-value-bind (shared seen-p)
+                                             (gethash next copies)
+                                           (if seen-p
+                                               (progn (setf (cdr cell) shared)
+                                                      (return))
+                                               (let ((fresh (cons nil nil)))
+                                                 (setf (gethash next copies) fresh
+                                                       (cdr cell) fresh
+                                                       cell fresh
+                                                       source next)))))))
+                          head))))
                  ((and copy-strings-p (stringp term))
                   (or (gethash term copies)
                       (setf (gethash term copies) (copy-seq term))))

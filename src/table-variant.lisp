@@ -148,12 +148,36 @@ third reports whether its canonical form contains logical variable markers."
                             (when (member node active :test (function eq))
                               (setf cyclic-p t))
                             copy)
-                          (let ((copy (cons nil nil))
-                                (active (cons node active)))
-                            (remember-copy node copy)
-                            (setf (car copy) (canonicalize (car node) active)
-                                  (cdr copy) (canonicalize (cdr node) active))
-                            copy))))
+                          (let ((head (cons nil nil)))
+                            (remember-copy node head)
+                            ;; Recurse on cars only; walk the cdr spine in
+                            ;; place.  ACTIVE grows along the spine exactly as
+                            ;; the recursive cdr calls extended it.
+                            (loop with cell = head
+                                  with source = node
+                                  with path = (cons node active)
+                                  do (setf (car cell) (canonicalize (car source) path))
+                                     (let ((next (resolve (cdr source))))
+                                       (if (not (consp next))
+                                           (progn
+                                             (setf (cdr cell) (canonicalize next path))
+                                             (return))
+                                           (multiple-value-bind (shared seen-p)
+                                               (find-copy next)
+                                             (if seen-p
+                                                 (progn
+                                                   (when (member next path
+                                                                 :test (function eq))
+                                                     (setf cyclic-p t))
+                                                   (setf (cdr cell) shared)
+                                                   (return))
+                                                 (let ((fresh (cons nil nil)))
+                                                   (remember-copy next fresh)
+                                                   (setf (cdr cell) fresh
+                                                         cell fresh
+                                                         source next
+                                                         path (cons next path))))))))
+                            head))))
                    (t node)))))
       (values (canonicalize term)
               cyclic-p
@@ -163,16 +187,32 @@ third reports whether its canonical form contains logical variable markers."
   "Return an EQUAL-safe encoding of TERM's cons graph."
   (let ((identities (make-hash-table :test #'eq))
         (next-index 0))
-    (labels ((encode (node)
-               (if (consp node) (multiple-value-bind (index present-p) (gethash node identities)
-              (if present-p (list :reference index)
-                (let ((index
-                      (prog1
-                        next-index
-                        (incf next-index))))
-                  (setf (gethash node identities) index)
-                  (list :cons index (encode (car node)) (encode (cdr node))))))
-            (list :atom node))))
+    (labels ((register (node)
+               (setf (gethash node identities)
+                     (prog1 next-index (incf next-index))))
+             (encode (node)
+               (if (consp node)
+                   (multiple-value-bind (index present-p) (gethash node identities)
+                     (if present-p
+                         (list :reference index)
+                         ;; The encoding nests each cdr as the fourth element.
+                         ;; Build that chain in place, recursing on cars only.
+                         (let ((root (list :cons (register node) nil nil)))
+                           (loop with encoded = root
+                                 with source = node
+                                 do (setf (third encoded) (encode (car source)))
+                                    (let ((next (cdr source)))
+                                      (if (or (not (consp next))
+                                              (nth-value 1 (gethash next identities)))
+                                          (progn
+                                            (setf (fourth encoded) (encode next))
+                                            (return))
+                                          (let ((fresh (list :cons (register next) nil nil)))
+                                            (setf (fourth encoded) fresh
+                                                  encoded fresh
+                                                  source next)))))
+                           root)))
+                   (list :atom node))))
       (encode term))))
 
 (defun %instantiate-variant (term &optional (cyclic-p t))
@@ -184,7 +224,12 @@ mutates terms."
         (first-variable nil)
         (variables nil)
         (copies (and cyclic-p (make-hash-table :test (function eq)))))
-    (labels ((marker-variable (node)
+    (labels ((marker-p (node)
+               (and (consp node)
+                    (eq (first node) +variant-variable-marker+)
+                    (consp (rest node))
+                    (null (cddr node))))
+             (marker-variable (node)
                (cond
                  (variables
                   (or (gethash node variables)
@@ -209,12 +254,29 @@ mutates terms."
                        (null (cddr node)))
                   (marker-variable node))
                  ((consp node)
-                  (let ((new-car (instantiate-tree (car node)))
-                        (new-cdr (instantiate-tree (cdr node))))
-                    (if (and (eq new-car (car node))
-                             (eq new-cdr (cdr node)))
-                        node
-                        (cons new-car new-cdr))))
+                  ;; Recurse on cars only.  Walk the spine forward, then rebuild
+                  ;; it backward so an unchanged suffix stays shared, as the
+                  ;; recursive form did.
+                  (let ((spine '())
+                        (new-cars '())
+                        (tail nil))
+                    (loop with source = node
+                          do (push source spine)
+                             (push (instantiate-tree (car source)) new-cars)
+                             (let ((next (cdr source)))
+                               (if (and (consp next) (not (marker-p next)))
+                                   (setf source next)
+                                   (progn (setf tail (instantiate-tree next))
+                                          (return)))))
+                    (loop with result = tail
+                          for source in spine
+                          for new-car in new-cars
+                          do (setf result
+                                   (if (and (eq new-car (car source))
+                                            (eq result (cdr source)))
+                                       source
+                                       (cons new-car result)))
+                          finally (return result))))
                  (t node)))
              (instantiate-graph (node)
                (cond
@@ -228,18 +290,35 @@ mutates terms."
                       (gethash node copies)
                     (if present-p
                         copy
-                        (let ((copy (cons nil nil)))
-                          (setf (gethash node copies) copy)
-                          (let ((new-car (instantiate-graph (car node)))
-                                (new-cdr (instantiate-graph (cdr node))))
-                            (setf (car copy) new-car
-                                  (cdr copy) new-cdr)
-                            (if (and (eq new-car (car node))
-                                     (eq new-cdr (cdr node)))
-                                (progn
-                                  (setf (gethash node copies) node)
-                                  node)
-                                copy))))))
+                        ;; Recurse on cars only.  Walk the spine forward,
+                        ;; registering each copy before its car is visited, then
+                        ;; finish the cells backward, deepest first, as the
+                        ;; recursive form returned.
+                        (let ((spine '())
+                              (tail nil))
+                          (loop with source = node
+                                do (let ((copy (cons nil nil)))
+                                     (setf (gethash source copies) copy)
+                                     (push (list source copy
+                                                 (instantiate-graph (car source)))
+                                           spine))
+                                   (let ((next (cdr source)))
+                                     (if (and (consp next)
+                                              (not (marker-p next))
+                                              (not (nth-value 1 (gethash next copies))))
+                                         (setf source next)
+                                         (progn (setf tail (instantiate-graph next))
+                                                (return)))))
+                          (loop with result = tail
+                                for (source copy new-car) in spine
+                                do (setf (car copy) new-car
+                                         (cdr copy) result
+                                         result
+                                         (if (and (eq new-car (car source))
+                                                  (eq result (cdr source)))
+                                             (setf (gethash source copies) source)
+                                             copy))
+                                finally (return result))))))
                  (t node))))
       (if cyclic-p
           (instantiate-graph term)

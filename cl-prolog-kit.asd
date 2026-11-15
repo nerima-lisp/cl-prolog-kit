@@ -155,6 +155,7 @@
                (:file "engine-runtime-test")
                (:file "engine-runtime-index-and-depth-test")
                (:file "index-and-bulk-insert-test")
+               (:file "long-list-traversal-test")
                (:file "engine-runtime-foreign-and-registration-test")
                (:file "capability-policy-test")
                (:file "engine-runtime-error-contract-test")

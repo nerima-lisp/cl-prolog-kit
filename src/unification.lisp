@@ -197,13 +197,31 @@ a term containing it (producing a rational/cyclic term)."
                              (%freshening-map-lookup resolved copies)
                            (if present-p
                                copy
-                               (let ((copy (cons nil nil)))
-                                 (%freshening-map-insert resolved copy copies)
-                                 (setf (car copy)
-                                       (substitute-term (car resolved))
-                                       (cdr copy)
-                                       (substitute-term (cdr resolved)))
-                                 copy)))
+                               (let ((head (cons nil nil)))
+                                 (%freshening-map-insert resolved head copies)
+                                 ;; Recurse on cars only; walk the cdr spine in
+                                 ;; place so a long list needs no stack depth.
+                                 (loop with cell = head
+                                       with source = resolved
+                                       do (setf (car cell)
+                                                (substitute-term (car source)))
+                                          (let ((next (%walk-term-indexed
+                                                       (cdr source) index)))
+                                            (if (not (consp next))
+                                                (progn (setf (cdr cell) next)
+                                                       (return))
+                                                (multiple-value-bind (shared seen-p)
+                                                    (%freshening-map-lookup next copies)
+                                                  (if seen-p
+                                                      (progn (setf (cdr cell) shared)
+                                                             (return))
+                                                      (let ((fresh (cons nil nil)))
+                                                        (%freshening-map-insert
+                                                         next fresh copies)
+                                                        (setf (cdr cell) fresh
+                                                              cell fresh
+                                                              source next)))))))
+                                 head)))
                          resolved))
                    (substitute-term (term)
                      (copy-resolved-term
@@ -297,11 +315,28 @@ COPIES preserves cons identity and cycles across calls that share it."
                       (%freshening-map-lookup node copies)
                     (if present-p
                         copy
-                        (let ((copy (cons nil nil)))
-                          (%freshening-map-insert node copy copies)
-                          (setf (car copy) (freshen (car node))
-                                (cdr copy) (freshen (cdr node)))
-                          copy))))
+                        (let ((head (cons nil nil)))
+                          (%freshening-map-insert node head copies)
+                          ;; Recurse on cars only; walk the cdr spine in place.
+                          (loop with cell = head
+                                with source = node
+                                do (setf (car cell) (freshen (car source)))
+                                   (let ((next (cdr source)))
+                                     (if (not (consp next))
+                                         (progn (setf (cdr cell) (freshen next))
+                                                (return))
+                                         (multiple-value-bind (shared seen-p)
+                                             (%freshening-map-lookup next copies)
+                                           (if seen-p
+                                               (progn (setf (cdr cell) shared)
+                                                      (return))
+                                               (let ((fresh (cons nil nil)))
+                                                 (%freshening-map-insert
+                                                  next fresh copies)
+                                                 (setf (cdr cell) fresh
+                                                       cell fresh
+                                                       source next)))))))
+                          head))))
                  (t node))))
       (freshen term)))
 

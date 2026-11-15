@@ -25,20 +25,27 @@ which would rebuild that index on every recursive step."
   "Return true when TERM contains no cycle through cons cells."
   (let ((active (make-hash-table :test #'eq))
         (complete (make-hash-table :test #'eq)))
+    ;; WALK recurses on cars only and follows the cdr spine in place; every
+    ;; spine cell stays active until the spine ends, as it did while the
+    ;; recursive cdr call ran.  A cycle anywhere makes the whole answer false,
+    ;; so it returns at once instead of unwinding the tables.
     (labels ((walk (node)
-               (let ((resolved (%walk-term node environment)))
-                 (cond
-                   ((atom resolved) t)
-                   ((gethash resolved complete) t)
-                   ((gethash resolved active) nil)
-                   (t
-                    (setf (gethash resolved active) t)
-                    (let ((acyclic-p (and (walk (car resolved))
-                                          (walk (cdr resolved)))))
-                      (remhash resolved active)
-                      (when acyclic-p
-                        (setf (gethash resolved complete) t))
-                      acyclic-p))))))
+               (let ((spine '()))
+                 (loop
+                   (let ((resolved (%walk-term node environment)))
+                     (cond
+                       ((atom resolved) (return))
+                       ((gethash resolved complete) (return))
+                       ((gethash resolved active)
+                        (return-from %term-acyclic-p nil))
+                       (t
+                        (setf (gethash resolved active) t)
+                        (push resolved spine)
+                        (walk (car resolved))
+                        (setf node (cdr resolved))))))
+                 (dolist (cell spine t)
+                   (remhash cell active)
+                   (setf (gethash cell complete) t)))))
       (walk term))))
 
 (defmacro define-term-predicate-builtin (&body definitions)
