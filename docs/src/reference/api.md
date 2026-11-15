@@ -261,15 +261,13 @@ by default.
 - `*max-prolog-inferences*`: the default inference budget of a top-level
   query, `nil` (unbounded) or a non-negative integer. One inference is one goal
   dispatch, one solution produced by a builtin or foreign predicate, or one
-  candidate examined by a builtin that searches.
-  Dispatches include user-rule calls made on the compiled rule-program path,
-  builtin calls, and goals run inside `findall/3`, `setof/3`, `call/N`, `\+`
-  and other meta-calls of the same query. Counting solutions is what stops
-  `repeat/0`, `between/3` and `length/2` from enumerating without bound
-  inside `findall/3` or `aggregate_all/3`. A deterministic builtin such as
-  `true/0` therefore costs two inferences.
-  Counting candidates stops a search whose candidates all fail, such as
-  `length(L, L)` or `append(X, [a], X)`, which never produces a solution.
+  candidate examined by a builtin that searches. A deterministic builtin
+  such as `true/0` therefore costs two inferences: its dispatch and its one
+  solution. Dispatches include user-rule calls, builtin calls, and goals run
+  inside `findall/3`, `setof/3`, `call/N`, `\+` and other meta-calls of the
+  same query. Counting solutions stops `repeat/0` and `between/3` inside
+  `findall/3` or `aggregate_all/3`; counting candidates stops a search whose
+  candidates all fail, such as `length(L, L)` or `append(X, [a], X)`.
   The searching builtins are `member/2`, `memberchk/2`, `select/3`,
   `nth0/3`, `nth1/3`, `last/2`, `append/3`, `length/2`, `permutation/2`,
   `atom_concat/3`, `sub_atom/5`, `string_concat/3`, `text_concat/3`,
@@ -278,7 +276,7 @@ by default.
   `stream_property/2`, `labeling/2` and `indomain/1`. Each list cell, split
   point, substring position, stored clause, table entry, or domain value they
   examine costs one inference, so a candidate that succeeds costs two
-  (examined and produced). For `retract/1`, `retractall/1` and `clause/2` the
+  (examined and produced) on top of the call's dispatch. For `retract/1`, `retractall/1` and `clause/2` the
   candidates are all clauses of the current module, not only those of the
   named predicate. A query that needs more raises
   `prolog-inference-limit-exceeded`.
@@ -296,7 +294,8 @@ by default.
   since the previous check, none of which made such an allocation. While
   inferences keep taking about the same time, W is at most about 10 ms, or
   one inference when a single inference takes longer. The time of one
-  builtin call is bounded only by the per-call limits above. A builtin
+  builtin call is bounded only by `*max-prolog-builtin-output-length*` and
+  the other per-call limits under Runtime Resource Limits above. A builtin
   whose work grows with a term it is given rather than with a count, such
   as `msort/2` on a long list, does not check the deadline early, so a
   query that switches from cheap inferences to a run of such calls can make
@@ -350,8 +349,7 @@ similar call) while one is running. Its inferences are charged to the root's
 count, and it always runs under the enclosing limit and deadline. A limit or
 deadline of its own applies as well, only where it is tighter than the
 enclosing one; its own limit counts from the inferences already used when it
-starts. A nested query therefore cannot raise or turn off the enclosing
-limit or deadline.
+starts.
 
 Which bounds of its own a nested query has depends on what it passes. If the
 enclosing query has a limit or a deadline and the nested query passes
@@ -371,10 +369,12 @@ throw, a failure, or a success, so a stopped query can still release what it
 holds. Cleanups nested inside other cleanups, and queries that cleanups
 start, do not add to this: together they stay within 1000 inferences past
 the limit of the innermost query that set one, and within 500 ms past its
-deadline. A cleanup checks the deadline at every inference. A cleanup that
+deadline. A cleanup goal checks the deadline at its first inference and then
+at the adaptive interval described for `*prolog-deadline*`. A cleanup that
 exhausts its allowance raises the same two conditions, and
 `prolog-inference-limit-exceeded-limit` then returns 1000, even when an
-enclosing cleanup had already used part of the allowance.
+enclosing cleanup had already used part of the allowance; for any other stop
+it returns the limit that was exceeded.
 
 A stop does not stay caught. When host code handles the condition and
 continues, or `catch/3` catches a ball that a cleanup threw in place of the
@@ -382,10 +382,12 @@ stop, the next inference charged under the exhausted limit stops again. A
 cleanup that runs after such a catch still gets its allowance, so this path
 too can reach L + 1000 inferences, and no more.
 
-The bound does not cover host code that binds the engine's unexported limit
-variables itself, or a query started in another thread, which is a root of
-its own. Binding `*max-prolog-inferences*` or `*prolog-deadline*` inside a
-foreign predicate is covered: it only sets the defaults of nested queries.
+The bound does not cover host code that binds the engine's internal limit
+variables itself (the unexported `cl-prolog-kit::*inference-...*` specials),
+or a query started in another thread, which is a root of its own. Binding the
+exported `*max-prolog-inferences*` or `*prolog-deadline*` inside a foreign
+predicate is covered: it changes only the default of an option a nested query
+does not pass, and that default can only tighten the enclosing bounds.
 Under a root without a deadline, only the 1000-inference allowance bounds how
 long a cleanup runs, so a cleanup whose few inferences are each expensive can
 run for a long time; under a root with neither limit nor deadline, nothing

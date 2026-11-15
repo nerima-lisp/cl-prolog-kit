@@ -20,7 +20,7 @@
 One inference is one goal dispatch, one solution produced by a builtin or
 foreign predicate, or one candidate examined by a builtin that searches.  A
 query that needs more raises PROLOG-INFERENCE-LIMIT-EXCEEDED.  Cleanup goals
-together run at most 1000 inferences past it.  A query nested inside another
+together run at most 1000 inferences past the limit in force when they start.  A query nested inside another
 is charged to the outermost one, and its own budget can only lower the
 enclosing one.")
 
@@ -28,12 +28,13 @@ enclosing one.")
   "Default absolute GET-INTERNAL-REAL-TIME deadline of a top-level query, or
 NIL for none.  A query still running at it raises PROLOG-DEADLINE-EXCEEDED
 after at most the builtin call running then plus up to 256 inferences: the
-deadline is checked every 1 to 256 inferences, an interval adapted so that
-checks are about 10 ms apart, and at the inference after any builtin call
+deadline is checked every 1 to 256 inferences, an interval halved when more
+than 10 ms passed since the previous check and doubled when less than 1 ms
+did, and at the inference after any builtin call
 that allocates more than 512 elements under
 *MAX-PROLOG-BUILTIN-OUTPUT-LENGTH*, which also bounds that call.  Cleanup
-goals together run at most 500 ms past the deadline, with the interval
-restarted at 1 for each.  A query nested inside another cannot have a later
+goals together run at most 500 ms past the deadline; each checks the deadline
+at its first inference.  A query nested inside another cannot have a later
 deadline than the enclosing one.  See PROLOG-DEADLINE-AFTER.")
 
 (defparameter *max-prolog-builtin-output-length* 1048576
