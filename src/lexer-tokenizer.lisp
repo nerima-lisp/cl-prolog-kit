@@ -259,8 +259,17 @@ requires layout text, a comment, or end of input after the end token."
                              do (take-number-character)))
                      (let ((lexeme (subseq text start position)))
                        (if float-p
-                           (let ((*read-default-float-format* 'double-float))
-                             (read-from-string lexeme))
+                           ;; LEXEME holds only digits, `.', `e'/`E' and a
+                           ;; sign, but a magnitude outside the double-float
+                           ;; range makes the reader signal; report that as a
+                           ;; Prolog syntax error instead of a Lisp condition.
+                           (handler-case
+                               (let ((*read-default-float-format* 'double-float)
+                                     (*read-eval* nil))
+                                 (read-from-string lexeme))
+                             ((or reader-error arithmetic-error) ()
+                               (%parse-error
+                                "Float literal ~A is out of range." lexeme)))
                            (parse-integer lexeme))))))))
       (loop while (peek)
             do (let ((start position))

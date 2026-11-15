@@ -138,6 +138,7 @@
                (:file "atom-canonicalization-test")
                (:file "operator-table-test")
                (:file "parser-test")
+               (:file "parser-float-overflow-test")
                (:file "term-writer-test")
                (:file "io-context-test")
                (:file "source-loader-test")
