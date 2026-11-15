@@ -395,26 +395,40 @@ control stack when the stack reaches a guard page. Under `--script`, SBCL
 runs with `--lose-on-corruption`, so touching the guard page calls the
 runtime's `lose()` and ends the process; a host cannot rely on catching
 `storage-condition` and must rely on this limit instead. A root query records
-a limit at 80% of the control stack of the thread it runs in, and every goal
-dispatch compares the stack pointer with it. A dispatch past the limit
-raises `prolog-stack-limit-exceeded`, a `prolog-resource-error` whose term is
+a limit at 80% of the control stack of the thread it runs in. Every goal
+dispatch compares the stack pointer with it, and so does every step of the
+term walks that unification, the occurs check and term copying perform
+inside a builtin call. Past the limit, the check raises
+`prolog-stack-limit-exceeded`, a `prolog-resource-error` whose term is
 `error(resource_error(control_stack), _)`. Unlike the inference and deadline
 limits, `catch/3` intercepts it; by the time its recovery runs, the stack has
 unwound to the `catch/3`. A query in another thread is a root of its own and
 uses that thread's stack.
 
-The check runs at goal dispatch only. A single builtin call that recurses
-over a deep or long term without dispatching goals can still use up the
-rest of the stack; for example, unifying with occurs check against a term
-nested about 10,000 levels deep, or copying a list of about 200,000 elements.
+Some term walks do not go through that check. In v1.6.0 these known cases
+still end the process under `--script`; the sizes are for arm64 macOS with
+SBCL's default 2 MB control stack:
+
+- A deep or long goal term that the host passes in. Query entry walks it,
+  to collect its variables and, in `prolog-succeeds-p`, to key the cache of
+  ground queries, before the limit is in force: `query-prolog` with
+  `write/1` of a term nested 100,000 levels deep, or `prolog-succeeds-p`
+  with `compare/3` of terms nested 20,000 levels deep.
+- Writing a term nested deeply enough to pass the checked walks before the
+  writer but not the writer's own recursion: `write/1` of a term nested
+  8,000 to 8,500 levels deep.
+- Calling a tabled predicate with a long ground list. The copy of the call
+  that tabling makes recurses down the list without the check: a list of
+  10,000 elements is enough.
 
 The prover does not reuse stack frames for tail calls, so a deterministic
 tail-recursive predicate such as `count(I, N) :- I < N, I1 is I + 1,
 count(I1, N)` still uses stack at every level. With SBCL's default 2 MB
 control stack it raises `prolog-stack-limit-exceeded` after roughly 2,000
-to 2,500 levels on arm64 macOS. This is a known limitation of v1.6.0. A host
-that needs deeper recursion can start SBCL with a larger
-`--control-stack-size`, which also sizes the stacks of new threads.
+to 2,500 levels on arm64 macOS. This is a known limitation of v1.6.0; a fix
+is planned for v1.7.0 or later. A host that needs deeper recursion can start
+SBCL with a larger `--control-stack-size`, which also sizes the stacks of new
+threads.
 
 ## Capability Policy
 

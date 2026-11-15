@@ -8,10 +8,14 @@
 ;;; Under --lose-on-corruption, which --script implies, that is fatal, and
 ;;; even without it a second hit before the stack unwinds past the guard is.
 ;;; So the root query records a limit short of the end of its thread's
-;;; control stack, and every goal dispatch compares the stack pointer with
-;;; it.  Proof search deepens the stack only through goal dispatch, so the
-;;; check sees every level of it.  The bounds are the thread's own: SBCL
-;;; binds *CONTROL-STACK-START* and *CONTROL-STACK-END* per thread, and
+;;; control stack, and two places compare the stack pointer with it: every
+;;; goal dispatch, through which proof search deepens the stack, and every
+;;; dereference in %WALK-TERM-INDEXED, through which unification, the occurs
+;;; check and term copying walk a term node by node within one builtin
+;;; call.  Walks that dereference only variables, such as variant
+;;; canonicalization over a ground term, and the term writer, are not
+;;; checked.  The bounds are the thread's own: SBCL binds
+;;; *CONTROL-STACK-START* and *CONTROL-STACK-END* per thread, and
 ;;; CONTROL-STACK-USAGE in SBCL's gc.lisp reads them the same way.
 
 (defconstant +control-stack-grows-downward-p+

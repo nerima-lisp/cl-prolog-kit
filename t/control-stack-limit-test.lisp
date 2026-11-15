@@ -44,6 +44,40 @@ Return the PROLOG-STACK-LIMIT-EXCEEDED it raised, or :FINISHED."
   ;; Shallow recursion is unaffected.
   (is-equal :finished (stack-test-query "cnt(0, 100).")))
 
+(defun stack-test-deep-term (depth leaf)
+  (let ((term leaf))
+    (dotimes (index depth term)
+      (setf term (list 'f term)))))
+
+(defun stack-test-goal (goal)
+  "Like STACK-TEST-QUERY for a goal given as a term."
+  (let ((cl-prolog-kit::*control-stack-limit-fraction* +stack-test-fraction+))
+    (handler-case
+        (progn (query-prolog (stack-test-rules) goal
+                             :max-inferences 10000000
+                             :deadline (prolog-deadline-after 10))
+               :finished)
+      (prolog-stack-limit-exceeded (condition) condition))))
+
+(deftest deep-terms-inside-one-builtin-raise-the-stack-limit ()
+  ;; Each of these walks a term 5000 levels deep inside a single builtin
+  ;; call, with no goal dispatch to check the stack: the occurs check of
+  ;; foldl/4's growing accumulator, and the copy and comparison msort/2
+  ;; makes of two deep terms.  Each runs twice: the guard page was not
+  ;; touched the first time.
+  (let ((deep-pair (list (stack-test-deep-term 5000 'b)
+                         (stack-test-deep-term 5000 'a))))
+    (dotimes (round 2)
+      (is (stack-test-stopped-p "numlist(1, 5000, L), foldl(wrap, L, a, _)."))
+      (is (typep (stack-test-goal (list 'cl-prolog-kit::msort deep-pair '?sorted))
+                 'prolog-stack-limit-exceeded))))
+  ;; A long list is walked down its tail.  Whether that recursion or a loop,
+  ;; sorting it either finishes or stops with the limit; it does not end
+  ;; the process.
+  (let ((result (stack-test-query "numlist(1, 20000, L), msort(L, _).")))
+    (is (or (eq result :finished)
+            (typep result 'prolog-stack-limit-exceeded)))))
+
 (deftest stack-limit-is-a-catchable-resource-error ()
   (let ((condition (stack-test-query "cnt(0, 3000).")))
     (is (typep condition 'prolog-resource-error))

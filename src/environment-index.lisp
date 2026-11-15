@@ -148,6 +148,8 @@
           do (setf term (cdr term-binding))
           finally (return representative))))
 (defun %walk-term-indexed (term index)
+  ;; Term walkers recurse through this per node; see control-stack.lisp.
+  (%check-control-stack)
   (when (not (logic-var-p term))
     (return-from %walk-term-indexed term))
   (let ((checkpoint term)
