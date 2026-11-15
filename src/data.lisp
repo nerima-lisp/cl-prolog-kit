@@ -458,9 +458,13 @@ values."
   (let ((inserted '()))
     (unwind-protect
          (progn
-           (dolist (clause clauses)
-             (rulebase-insert-clause! rulebase clause :position :last)
-             (push (car (rulebase-entries-tail rulebase)) inserted))
+           (when clauses
+             (let ((old-tail (rulebase-entries-tail rulebase)))
+               (rulebase-insert-clauses! rulebase clauses :position :last)
+               ;; Bulk insertion splices the new cells after the old tail.
+               (setf inserted (copy-list (if old-tail
+                                             (cdr old-tail)
+                                             (rulebase-entries rulebase))))))
            (funcall function))
       (when inserted
         (%rulebase-retract-entries!

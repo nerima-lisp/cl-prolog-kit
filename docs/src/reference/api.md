@@ -52,7 +52,8 @@ the caller.
 
 `(call-with-overlay-facts rulebase clauses function)` appends `clauses`
 (`clause` objects from `make-clause`, facts or rules) to `rulebase` in place,
-after the clauses already defined for the same predicates. It then calls
+after the clauses already defined for the same predicates, as one
+`rulebase-insert-clauses!` batch (one revision for the whole batch). It then calls
 `function` and retracts exactly those clauses when `function` returns or
 exits non-locally, and returns `function`'s values. Clauses that `function`
 asserts or retracts itself stay as they are, and an overlay clause that

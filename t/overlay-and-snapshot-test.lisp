@@ -231,3 +231,41 @@
     (is (eq :consistent (sb-thread:join-thread worker)))
     (is-equal (+ 2 rounds)
               (length (query-prolog original '(item ?x))))))
+
+;;; Interplay with the other v1.6.0 additions
+
+(deftest snapshot-carries-the-capability-policy ()
+  (let* ((policy (make-prolog-capability-policy))
+         (original (make-rulebase :capability-policy policy))
+         (snapshot (rulebase-snapshot original)))
+    (is (eq policy (rulebase-capability-policy snapshot)))
+    (is (eq :denied
+            (handler-case
+                (progn (query-prolog snapshot
+                              (list 'open (prolog-atom "kb-snapshot.txt")
+                                    (prolog-atom "write") '?s))
+                       :opened)
+              (prolog-permission-error () :denied))))))
+
+(deftest overlay-inserts-a-batch-under-one-revision ()
+  (let* ((rulebase (%overlay-base-rulebase))
+         (before (cl-prolog-kit::rulebase-revision rulebase)))
+    (with-overlay-facts (rulebase (%overlay-facts 'item '(o1 o2 o3)))
+      (is-equal (1+ before) (cl-prolog-kit::rulebase-revision rulebase))
+      (is-equal '(base1 base2 o1 o2 o3)
+                (%overlay-values rulebase '(item ?x) '?x)))
+    (is-equal (+ 2 before) (cl-prolog-kit::rulebase-revision rulebase))
+    (is-equal '(base1 base2) (%overlay-values rulebase '(item ?x) '?x))))
+
+(deftest overlay-with-no-clauses-leaves-the-revision-alone ()
+  (let* ((rulebase (%overlay-base-rulebase))
+         (before (cl-prolog-kit::rulebase-revision rulebase)))
+    (is-equal :done (with-overlay-facts (rulebase '()) :done))
+    (is-equal before (cl-prolog-kit::rulebase-revision rulebase))))
+
+(deftest overlay-on-an-empty-rulebase-is-fully-removed ()
+  (let ((rulebase (make-rulebase)))
+    (is-equal '(o1 o2)
+              (with-overlay-facts (rulebase (%overlay-facts 'item '(o1 o2)))
+                (%overlay-values rulebase '(item ?x) '?x)))
+    (is (null (rulebase-visible-clauses rulebase)))))
