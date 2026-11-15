@@ -32,7 +32,7 @@ The reader returns the offending value or goal for diagnostics. See
 
 | Condition                         | Reader                                  | Signalled when |
 | --------------------------------- | --------------------------------------- | -------------- |
-| `prolog-inference-limit-exceeded` | `prolog-inference-limit-exceeded-limit` | A query dispatches more goals, or its builtins produce more solutions, than `:max-inferences` (or `*max-prolog-inferences*`) allows. |
+| `prolog-inference-limit-exceeded` | `prolog-inference-limit-exceeded-limit` | A query dispatches more goals, or its builtins produce more solutions or examine more candidates, than `:max-inferences` (or `*max-prolog-inferences*`) allows. |
 | `prolog-deadline-exceeded`        | `prolog-deadline-exceeded-deadline`     | A query is running when its `:deadline` (or `*prolog-deadline*`) has passed. |
 
 The readers return the budget and the deadline that were exceeded. Both are

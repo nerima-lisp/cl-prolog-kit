@@ -227,13 +227,27 @@ by default.
 
 - `*max-prolog-inferences*`: the default inference budget of a top-level
   query, `nil` (unbounded) or a non-negative integer. One inference is one goal
-  dispatch or one solution produced by a builtin or foreign predicate.
+  dispatch, one solution produced by a builtin or foreign predicate, or one
+  candidate examined by a builtin that searches.
   Dispatches include user-rule calls made on the compiled rule-program path,
   builtin calls, and goals run inside `findall/3`, `setof/3`, `call/N`, `\+`
   and other meta-calls of the same query. Counting solutions is what stops
   `repeat/0`, `between/3` and `length/2` from enumerating without bound
   inside `findall/3` or `aggregate_all/3`. A deterministic builtin such as
-  `true/0` therefore costs two inferences. A query that needs more raises
+  `true/0` therefore costs two inferences.
+  Counting candidates stops a search whose candidates all fail, such as
+  `length(L, L)` or `append(X, [a], X)`, which never produces a solution.
+  The searching builtins are `member/2`, `memberchk/2`, `select/3`,
+  `nth0/3`, `nth1/3`, `last/2`, `append/3`, `length/2`, `permutation/2`,
+  `atom_concat/3`, `sub_atom/5`, `string_concat/3`, `text_concat/3`,
+  `sub_string/5`, `retract/1`, `retractall/1`, `clause/2`,
+  `current_predicate/1`, `current_op/3`, `current_char_conversion/2`,
+  `stream_property/2`, `labeling/2` and `indomain/1`. Each list cell, split
+  point, substring position, stored clause, table entry, or domain value they
+  examine costs one inference, so a candidate that succeeds costs two
+  (examined and produced). For `retract/1`, `retractall/1` and `clause/2` the
+  candidates are all clauses of the current module, not only those of the
+  named predicate. A query that needs more raises
   `prolog-inference-limit-exceeded`.
 - `*prolog-deadline*`: the default deadline, `nil` or an absolute
   `get-internal-real-time` value. A query still running at the deadline raises
