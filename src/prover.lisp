@@ -215,8 +215,8 @@ Return (VALUES NORMALIZED-GOAL EXPLICIT-MODULE)."
 
 (defun %prove-goal/k (goal state succeed)
   "Prove GOAL, counting every dispatched call for inference and local depth
-limits."
-  (%count-inference)
+limits and checking the control stack limit."
+  (%count-dispatch)
   (if (null *call-depth-limit-token*)
       (%prove-goal-dispatch/k goal state succeed)
       (progn
@@ -591,7 +591,7 @@ body throws here, abandoning the remaining clause alternatives."
       (%rule-program-direct-entries instruction variables state)
     (if direct-p
         (progn
-          (%count-inference)
+          (%count-dispatch)
           (if (null *call-depth-limit-token*)
               (%prove-rule-program-direct/k
                instruction variables entries state succeed)

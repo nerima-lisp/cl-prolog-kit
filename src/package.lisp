@@ -68,6 +68,7 @@ is extensible (see DEFINE-FOREIGN-PREDICATE).")
    #:prolog-inference-limit-exceeded-limit
    #:prolog-deadline-exceeded
    #:prolog-deadline-exceeded-deadline
+   #:prolog-stack-limit-exceeded
    #:invalid-goal-error
    #:invalid-goal-error-goal
    #:prolog-exception

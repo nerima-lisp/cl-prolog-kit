@@ -214,6 +214,12 @@ running query's limits."
   `(when (> (incf *inference-used*) *inference-check-at*)
      (%inference-check)))
 
+(defmacro %count-dispatch ()
+  "Charge one goal dispatch and check the control stack limit; see
+%COUNT-INFERENCE and %CHECK-CONTROL-STACK."
+  `(progn (%check-control-stack)
+          (%count-inference)))
+
 (defun %validate-max-inferences (value)
   "Return VALUE when it is NIL or a non-negative integer, else signal TYPE-ERROR."
   (unless (typep value '(or null (integer 0)))
@@ -288,7 +294,8 @@ whichever of its own and the enclosing bounds comes first."
                   (*inference-used* 0)
                   (*inference-poll-at* 0)
                   (*inference-poll-interval* 1)
-                  (*inference-last-poll* nil))
+                  (*inference-last-poll* nil)
+                  (*control-stack-limit* (%control-stack-limit)))
               (%call-with-query-bounds limit deadline function))))))
 
 (defmacro %with-inference-limits ((max-inferences deadline) &body body)

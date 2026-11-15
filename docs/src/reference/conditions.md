@@ -46,6 +46,15 @@ it raises the same conditions, and then the reader of
 [Runtime Resource Limits](api.md#inference-budget-and-deadline) for how the
 limits are counted and how nested queries share them.
 
+## Control stack limit
+
+| Condition                     | Reader | Signalled when |
+| ----------------------------- | ------ | -------------- |
+| `prolog-stack-limit-exceeded` | none   | A goal dispatch finds that the query's thread has used 80% of its control stack. |
+
+It is a `prolog-resource-error` carrying `resource_error(control_stack)`, and
+Prolog `catch/3` intercepts it. See [Control stack](api.md#control-stack).
+
 ## Structurally invalid goals
 
 | Condition            | Reader                    | Signalled when |

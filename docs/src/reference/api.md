@@ -313,11 +313,9 @@ wrong type, in an option or in a special, signals `type-error`.
               :max-depth 1000)
 ```
 
-`:max-inferences` does not bound recursion depth. Each nested rule call adds
-Lisp stack frames, and roughly 3000 levels of recursion exhaust SBCL's
-default control stack, which a budget of a few thousand inferences already
-allows. A host running untrusted rules must therefore also pass `:max-depth`
-(or bind `*max-prolog-depth*`), as above.
+`:max-inferences` does not bound recursion depth; the control stack limit
+below does. `:max-depth` (or `*max-prolog-depth*`) bounds the rule-resolution
+depth on top of it, and its default stays `nil`.
 
 `consult-prolog` takes no limit options. The `:- initialization(Goal)` goals
 of the consulted text run under `*max-prolog-inferences*` and
@@ -389,6 +387,34 @@ Under a root without a deadline, only the 1000-inference allowance bounds how
 long a cleanup runs, so a cleanup whose few inferences are each expensive can
 run for a long time; under a root with neither limit nor deadline, nothing
 bounds a cleanup.
+
+### Control stack
+
+Each nested rule call adds Lisp stack frames. SBCL detects running out of
+control stack when the stack reaches a guard page. Under `--script`, SBCL
+runs with `--lose-on-corruption`, so touching the guard page calls the
+runtime's `lose()` and ends the process; a host cannot rely on catching
+`storage-condition` and must rely on this limit instead. A root query records
+a limit at 80% of the control stack of the thread it runs in, and every goal
+dispatch compares the stack pointer with it. A dispatch past the limit
+raises `prolog-stack-limit-exceeded`, a `prolog-resource-error` whose term is
+`error(resource_error(control_stack), _)`. Unlike the inference and deadline
+limits, `catch/3` intercepts it; by the time its recovery runs, the stack has
+unwound to the `catch/3`. A query in another thread is a root of its own and
+uses that thread's stack.
+
+The check runs at goal dispatch only. A single builtin call that recurses
+over a deep or long term without dispatching goals can still use up the
+rest of the stack; for example, unifying with occurs check against a term
+nested about 10,000 levels deep, or copying a list of about 200,000 elements.
+
+The prover does not reuse stack frames for tail calls, so a deterministic
+tail-recursive predicate such as `count(I, N) :- I < N, I1 is I + 1,
+count(I1, N)` still uses stack at every level. With SBCL's default 2 MB
+control stack it raises `prolog-stack-limit-exceeded` after roughly 2,000
+to 2,500 levels on arm64 macOS. This is a known limitation of v1.6.0. A host
+that needs deeper recursion can start SBCL with a larger
+`--control-stack-size`, which also sizes the stacks of new threads.
 
 ## Capability Policy
 
@@ -608,6 +634,7 @@ signalled and how to handle it, see
 - Inference and deadline limits: `prolog-inference-limit-exceeded` with reader
   `prolog-inference-limit-exceeded-limit`, and `prolog-deadline-exceeded` with
   reader `prolog-deadline-exceeded-deadline`
+- Control stack limit: `prolog-stack-limit-exceeded`
 - Structurally invalid goals: `invalid-goal-error` and reader
   `invalid-goal-error-goal`
 - Prolog throws: `prolog-exception` and reader `prolog-exception-term`

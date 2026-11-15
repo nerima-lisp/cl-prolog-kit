@@ -145,6 +145,14 @@ inference budget allows.  Prolog catch/3 does not intercept it."))
   (:documentation "Signalled when a query is still running at its deadline.
 Prolog catch/3 does not intercept it."))
 
+(define-condition prolog-stack-limit-exceeded (prolog-resource-error) ()
+  (:report (lambda (condition stream)
+             (declare (ignore condition))
+             (format stream "Prolog control stack limit exceeded.")))
+  (:documentation "Signalled when proof search has used most of the running
+thread's control stack.  Unlike the inference and deadline limits, Prolog
+catch/3 intercepts it: catching it unwinds the stack it reports."))
+
 (deftype %catchable-prolog-exception ()
   "Prolog exceptions that catch/3 may intercept.  Inference and deadline
 limits are excluded so a goal cannot catch its way past its own budget."
