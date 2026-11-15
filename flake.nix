@@ -142,9 +142,17 @@
       # nobody has agreed to yet. It does assert its own report is non-empty
       # before installing it, which is why `checks.coverage` can be the report
       # itself instead of a wrapper derivation running `test -f`.
+      # The SBCL executable t/control-stack-limit-test.lisp starts as a child
+      # process, set on every check that runs the suite. The suite may run in
+      # an image that is not a plain SBCL (cl-weave's CLI core), where the
+      # test cannot find one by itself. `pkgs.sbcl` is the `lisp` default of
+      # `mkPackageFlake`, and cl-weave follows this flake's nixpkgs, so it is
+      # the SBCL every check already runs.
+      testSbcl = ctx: "${ctx.pkgs.sbcl}/bin/sbcl";
+
       coverageReport =
         ctx:
-        ctx.cl.mkCoverageReport {
+        (ctx.cl.mkCoverageReport {
           drv = ctx.package;
           name = "cl-prolog-kit-coverage";
           systems = [
@@ -154,7 +162,8 @@
           ];
           timeoutSeconds = 600;
           killAfterSeconds = 30;
-        };
+        }).overrideAttrs
+          { CL_PROLOG_KIT_TEST_SBCL = testSbcl ctx; };
     in
     # `mkPackageFlake` spans systems -- it obtains a `pkgs` and its own
     # cl-nix-forge instance per entry in `systems` -- so the per-system `lib`
@@ -285,6 +294,12 @@
         # thing that makes `checks.app-test` more than a duplicate gate.
         apps.test = testApp ctx;
         apps.default = testApp ctx;
+
+        # The generated suite check, with the child SBCL of
+        # t/control-stack-limit-test.lisp; see `testSbcl`.
+        checks.default = ctx.generated.checks.default.overrideAttrs {
+          CL_PROLOG_KIT_TEST_SBCL = testSbcl ctx;
+        };
       };
 
       # Granularity lives here, NOT in extra GitHub Actions jobs: `nix flake
@@ -354,6 +369,7 @@
             app-test = ctx.pkgs.runCommand "cl-prolog-kit-app-test" { } ''
               export HOME="$TMPDIR/home"
               export XDG_CACHE_HOME="$TMPDIR/cache"
+              export CL_PROLOG_KIT_TEST_SBCL="${testSbcl ctx}"
               mkdir -p "$HOME" "$XDG_CACHE_HOME"
               timeout -k 30 600 ${(testApp ctx).program}
               touch "$out"

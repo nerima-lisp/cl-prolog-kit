@@ -195,75 +195,31 @@ symbols with their package and binds only CL-USER ones."
           +stack-cleanup-rules+
           goals))
 
-(defparameter *stack-cleanup-self-exe* "/proc/self/exe"
-  "Link to the running executable, where the system has one (Linux).")
+(defun stack-cleanup-child-runtime ()
+  "Return the SBCL executable for the child: CL_PROLOG_KIT_TEST_SBCL when it
+is set, else SB-EXT:*RUNTIME-PATHNAME*.  The flake checks set the variable
+to the SBCL they use, because under the cl-weave CLI's wrapper the running
+image is not a plain SBCL and *RUNTIME-PATHNAME* may name the wrapper."
+  (let ((variable (sb-ext:posix-getenv "CL_PROLOG_KIT_TEST_SBCL")))
+    (if (and variable (plusp (length variable)))
+        variable
+        (namestring sb-ext:*runtime-pathname*))))
 
-(defun stack-cleanup-sbcl-runtime-candidates ()
-  "Return the paths that may name the running SBCL runtime binary, the real
-executable first.  Under the cl-weave CLI's wrapper, which runs SBCL with
-`exec -a \"$0\"`, SB-EXT:*RUNTIME-PATHNAME* names the wrapper script on
-Linux, so *STACK-CLEANUP-SELF-EXE* comes first where it exists."
-  (remove-duplicates
-   (remove nil
-           (list (probe-file *stack-cleanup-self-exe*)
-                 sb-ext:*runtime-pathname*
-                 (and sb-ext:*runtime-pathname*
-                      (probe-file sb-ext:*runtime-pathname*))))
-   :test #'equal :key #'namestring))
+(defun stack-cleanup-child-results (runtime goals)
+  "Run each of GOALS in a child SBCL, the executable RUNTIME with its own
+core under --script, which ends the process on a guard page hit, with the
+shipped stack fraction.  Return the child's exit code, or :NOT-STARTED when
+it could not be run, its output when the code is not 0 (else NIL), cut to
+the first 2000 and the last 1000 characters, and, when it printed them, its
+stack fraction and one list of (SOLUTION-COUNT OPENED CLOSED COPIED) per
+goal.  The variable Deep in a goal stands for a term nested 4000 levels
+deep, too deep to copy within the cleanup margin and shallow enough for
+query entry, which walks it without the check.
 
-(defun stack-cleanup-sbcl-runtime-and-core ()
-  "Return an SBCL runtime binary, SBCL's own sbcl.core for it, and a list of
-the runtime and core paths tried, or NIL, NIL and that list when no core
-exists.
-
-The first runtime candidate with a core beside it, in the install layout
-<prefix>/bin/sbcl and <prefix>/lib/sbcl/sbcl.core that nixpkgs keeps, is
-taken, so that the core matches the runtime build; the wrapper script has no
-core beside it.  Otherwise the first runtime candidate is paired with
-the core in SBCL_HOME or SB-INT:SBCL-HOMEDIR-PATHNAME.  Either may be
-unusable under the wrapper: SBCL_HOME may be unset, and SBCL derives the
-home directory from argv[0] first, which the wrapper sets to its own path."
-  (let* ((runtimes (stack-cleanup-sbcl-runtime-candidates))
-         (pairs (mapcar (lambda (runtime)
-                          (cons runtime
-                                (merge-pathnames "../lib/sbcl/sbcl.core"
-                                                 (uiop:pathname-directory-pathname
-                                                  runtime))))
-                        runtimes))
-         (homes (remove nil
-                        (list (let ((home (sb-ext:posix-getenv "SBCL_HOME")))
-                                (and home (plusp (length home))
-                                     (merge-pathnames "sbcl.core"
-                                                      (uiop:ensure-directory-pathname
-                                                       home))))
-                              (let ((home (sb-int:sbcl-homedir-pathname)))
-                                (and home (merge-pathnames "sbcl.core" home))))))
-         (tried (list :runtimes (mapcar #'namestring runtimes)
-                      :cores (mapcar #'namestring (append (mapcar #'cdr pairs) homes))))
-         (own (find-if (lambda (pair) (probe-file (cdr pair))) pairs))
-         (home (find-if #'probe-file homes)))
-    (cond (own (values (car own) (cdr own) tried))
-          ((and home runtimes) (values (first runtimes) home tried))
-          (t (values nil nil tried)))))
-
-(defun stack-cleanup-child-results (runtime core goals)
-  "Run each of GOALS in a child SBCL, the binary RUNTIME started with CORE
-under --script, which ends the process on a guard page hit, with the shipped
-stack fraction.  Return the child's
-exit code, its output when the code is not 0 (else NIL), cut to the first
-2000 and the last 1000 characters, and, when it printed them, its stack
-fraction and one list of (SOLUTION-COUNT OPENED CLOSED COPIED) per goal.  The variable Deep in a goal
-stands for a term nested 4000 levels deep, too deep to copy within the
-cleanup margin and shallow enough for query entry, which walks it without
-the check.
-
-The parent may itself run from a saved core whose toplevel is a test runner
-(the cl-weave CLI), which would take --script as its own option, so the
-child gets SBCL's own core; see STACK-CLEANUP-SBCL-RUNTIME-AND-CORE.  It gets a fresh HOME and
-cache, and no other environment, so the runner's ASDF configuration (such as
-output translations into a read-only store) does not reach it."
-  (let* ((sbcl-home (uiop:pathname-directory-pathname core))
-         (directory (uiop:ensure-directory-pathname
+The child gets a fresh HOME and cache, and no other environment, so the
+runner's ASDF configuration (such as output translations into a read-only
+store) does not reach it."
+  (let* ((directory (uiop:ensure-directory-pathname
                      (uiop:merge-pathnames*
                       (format nil "cl-prolog-kit-stack-~36R"
                               (random (expt 2 64) (make-random-state t)))
@@ -276,20 +232,21 @@ output translations into a read-only store) does not reach it."
              (write-string (stack-cleanup-child-script goals) stream))
            (let* ((output (make-string-output-stream))
                   (process
-                    (sb-ext:run-program
-                     runtime
-                     (list "--core" (namestring core)
-                           "--script" (namestring script))
-                     :environment
-                     (list (format nil "SBCL_HOME=~A" (namestring sbcl-home))
-                           (format nil "HOME=~A" (namestring directory))
-                           (format nil "XDG_CACHE_HOME=~Acache/" (namestring directory))
-                           (format nil "CL_SOURCE_REGISTRY=~A"
-                                   (namestring
-                                    (asdf:system-source-directory "cl-prolog-kit"))))
-                     :directory directory
-                     :input nil :output output :error output :wait t))
-                  (code (sb-ext:process-exit-code process))
+                    (handler-case
+                        (sb-ext:run-program
+                         runtime (list "--script" (namestring script))
+                         :environment
+                         (list (format nil "HOME=~A" (namestring directory))
+                               (format nil "XDG_CACHE_HOME=~Acache/" (namestring directory))
+                               (format nil "CL_SOURCE_REGISTRY=~A"
+                                       (namestring
+                                        (asdf:system-source-directory "cl-prolog-kit"))))
+                         :directory directory
+                         :input nil :output output :error output :wait t)
+                      (error (condition)
+                        (format output "~A" condition)
+                        nil)))
+                  (code (if process (sb-ext:process-exit-code process) :not-started))
                   (text (get-output-stream-string output))
                   (printed (and (eql code 0)
                                 (ignore-errors (read-from-string text)))))
@@ -303,25 +260,6 @@ output translations into a read-only store) does not reach it."
                      (and (consp printed) (cdr printed)))))
       (uiop:delete-directory-tree directory :validate t :if-does-not-exist :ignore))))
 
-(defun stack-cleanup-shipped-limit-assertions (runtime core)
-  (multiple-value-bind (code output-tail fraction results)
-      (stack-cleanup-child-results
-       runtime core
-       '("catch(rec(0), error(resource_error(control_stack), _), true)."
-         "assertz(deep(Deep)),
-          catch(rec_deep(0), error(resource_error(control_stack), _), true)."))
-    ;; The tail of the child's output is NIL on exit code 0 and shows in
-    ;; the failure report otherwise.
-    (is-equal '(0 nil) (list code output-tail))
-    (is-equal 4/5 fraction)
-    (is-equal 2 (length results))
-    (loop for (solutions opened closed) in results
-          do (is-equal 1 solutions)
-             ;; A quarter of the stack holds about 300 levels of rec/1.
-             (is (> opened 600))
-             (is-equal opened closed))
-    (is-equal 0 (fourth (second results)))))
-
 (deftest cleanups-after-a-stack-stop-run-at-the-shipped-limit (:timeout 120)
   ;; A child SBCL loads the system and runs about 2000 levels of proof
   ;; search, so this takes longer than the default timeout.  Run at the
@@ -332,8 +270,22 @@ output translations into a read-only store) does not reach it."
   ;; each cleanup then copies a term too deep for the margin and stops at
   ;; the ceiling, so none reaches copied/1; that stop is dropped while the
   ;; first one unwinds, so catch/3 still receives the resource error.
-  (multiple-value-bind (runtime core tried) (stack-cleanup-sbcl-runtime-and-core)
-    ;; Names the paths tried in the failure report when none exists.
-    (is-equal nil (unless core (list :no-sbcl-core-among tried)))
-    (when core
-      (stack-cleanup-shipped-limit-assertions runtime core))))
+  (let ((runtime (stack-cleanup-child-runtime)))
+    (multiple-value-bind (code output-tail fraction results)
+        (stack-cleanup-child-results
+         runtime
+         '("catch(rec(0), error(resource_error(control_stack), _), true)."
+           "assertz(deep(Deep)),
+            catch(rec_deep(0), error(resource_error(control_stack), _), true)."))
+      ;; The executable and the child's output show in the failure report
+      ;; when the child did not exit with code 0.
+      (is-equal (list runtime 0 nil) (list runtime code output-tail))
+      (is-equal 4/5 fraction)
+      (is-equal 2 (length results))
+      (loop for (solutions opened closed) in results
+            do (is-equal 1 solutions)
+               ;; A quarter of the stack holds about 300 levels of rec/1.
+               (is (> opened 600))
+               (is-equal opened closed))
+      (is-equal 0 (fourth (second results))))))
+
