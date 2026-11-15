@@ -681,8 +681,7 @@ indicator; see
 ## DCG
 
 - Grammar definition and execution: `def-dcg-rule`, `phrase`, `phrase-all`
-- Continuation queries: `phrase-next-terminals`, `map-phrase-next-terminals`,
-  `phrase-token-valid-p`
+- Token checks: `phrase-token-valid-p`, `phrase-filter-candidates`
 - Combinators: `dcg-alt`, `dcg-opt`, `dcg-star`, `dcg-plus`,
   `dcg-error-recovery`
 - Token matchers: `dcg-token-match`, `dcg-token-match-value`
@@ -691,26 +690,22 @@ DCG tokens are either a bare token-kind symbol or a `(kind . value)` cons.
 `dcg-token-match` matches the kind and returns the remaining input;
 `dcg-token-match-value` matches both kind and value. See [DCG](../guide/dcg.md).
 
-### Next terminals after a prefix
+### Checking a typed token
 
-Three functions answer what may follow a token list `prefix` that a user has
+Two functions check tokens that may follow a token list `prefix` a user has
 typed so far:
 
-- `(phrase-next-terminals rulebase nonterminal prefix &key max-depth max-inferences deadline)`
-  returns `(values terminals any-p end-p)`: the candidates for the next token,
-  for completion.
-- `(map-phrase-next-terminals function rulebase nonterminal prefix &key ...)`
-  takes the same arguments and calls `function` with `(:terminal term)`,
-  `(:any nil)` or `(:end nil)` as each distinct item is found. It returns
-  `nil`.
-- `(phrase-token-valid-p rulebase nonterminal prefix token &key ...)` checks
-  one typed, ground `token`, for marking an invalid token.
+- `(phrase-token-valid-p rulebase nonterminal prefix token &key max-depth max-inferences deadline)`
+  returns false when no input that starts with `prefix` followed by `token`
+  is a phrase of `nonterminal`, and true otherwise.
+- `(phrase-filter-candidates rulebase nonterminal prefix candidates &key max-depth max-inferences deadline)`
+  returns the elements of `candidates`, in order, for which
+  `phrase-token-valid-p` is true. The caller supplies the candidates, for
+  example the flags and subcommands it knows, and the limits bound all the
+  checks together.
 
-`nonterminal` is a term such as `(read-prolog-term "git")` or
-`(read-prolog-term "opts([])")`. `prefix` must be a proper list of tokens,
-otherwise `type-error` is signalled. Tokens and returned terminals are terms:
-build an atom from a typed word with `prolog-atom` and get a terminal's text
-back with `prolog-atom-text` (see [Atoms](#atoms)).
+`nonterminal` is a term such as `(read-prolog-term "git")`. `prefix` and
+`candidates` must be proper lists, otherwise `type-error` is signalled.
 
 ```lisp
 (defparameter *git*
@@ -726,101 +721,64 @@ branch  --> [B], { git_branch(B) }.
 git_branch(main).
 git_branch(dev)."))
 
-(phrase-next-terminals *git* (read-prolog-term "git")
-                       (read-prolog-term "[git, commit]"))
-;; terminals: the atoms '-m' and '--amend'; any-p NIL; end-p T
-(phrase-next-terminals *git* (read-prolog-term "git")
-                       (read-prolog-term "[git, checkout]"))
-;; terminals: the atoms main and dev; any-p NIL; end-p NIL
 (phrase-token-valid-p *git* (read-prolog-term "git")
                       (read-prolog-term "[git, checkout]")
                       (read-prolog-term "feature"))
 ;; NIL: no input that starts with git checkout feature is a phrase
+(phrase-filter-candidates *git* (read-prolog-term "git")
+                          (read-prolog-term "[git, commit]")
+                          (read-prolog-term "['-m', '--amend', dev]"))
+;; the atoms '-m' and '--amend'
 ```
 
-#### What the results promise
+#### The token contract
 
-For a ground `prefix`, a ground token `t` and limits that are not reached:
+- A candidate is a concrete token in the representation the input uses:
+  a Prolog atom or term for a `-->` grammar, and a bare kind such as
+  `:name` or a `(kind . value)` cons for a `def-dcg-rule` grammar.
+- A bare kind is a token whose value is `nil`. It does not match a rule that
+  names a value, such as `(dcg-token-match-value :name "bob")`; the token
+  `(:name . "bob")` does.
+- A false result is a sound rejection: the token can be marked invalid.
+- A true result is not a promise that a phrase exists. The check runs the
+  grammar on `prefix ++ [token|R]` and accepts as soon as the derivation
+  reads past `token` into `R`, passes `R` to a builtin or foreign predicate
+  other than those that only bind it, or succeeds. Guards on later tokens are
+  not run, so the result over-accepts: with `oa --> [a], [_], {fail}.` the
+  token `a` is accepted though no input is a phrase.
+- A term with variables is not a token. Checking a schema such as
+  `file(_)` cannot reject its instances: with `pk(a) :- !. pk(b).` and
+  `fl --> [file(X)], {pk(X), X == b}.`, the check of `file(_)` is false
+  while `file(b)` is true.
 
-- Completeness. If `phrase(nonterminal, prefix ++ [t|S])` succeeds for some
-  `S`, then `any-p` is true or `t` is an instance of a returned terminal.
-- `end-p` is exactly whether `phrase(nonterminal, prefix)` succeeds.
-- A returned ground terminal is viable: the derivation of `prefix ++ [t|R]`
-  does not fail before it reads or tests `R`, or succeeds. Whether some
-  continuation completes the phrase is undecidable in general and is not
-  claimed.
-- A returned terminal with variables, such as `f(_)`, means that some instance
-  may be valid. `any-p` means the candidates could not be enumerated, for
-  example because the next token is checked by a foreign predicate or by a
-  generator without end. Neither may be used to decide that a typed token is
-  invalid; use `phrase-token-valid-p` for that.
-- `phrase-token-valid-p` returns `nil` only when no input that starts with
-  `prefix ++ [token]` is a phrase. It returns true when the derivation of
-  `prefix ++ [token|R]` reads or tests `R`, or succeeds, which does not promise
-  that a phrase exists.
+The check treats these builtins as only binding their arguments and runs
+them on `R`: `=`, `call/N`, conjunction, disjunction, `true`, `fail`,
+`false`, `member/2`, `append/3`, `between/3`, `length/2`, `select/3`,
+`phrase/2,3` and the `def-dcg-rule` matchers `dcg-token-match`,
+`dcg-token-match-value`, `dcg-alt` and `dcg-opt`. They are recognized by
+their solver, so a foreign predicate with one of these names is not. `\+`,
+`once/1`, `->`, `*->`, if-then-else, `forall/2` and `ignore/1` run as usual,
+and the goals inside them are checked in turn. Each check uses its own
+table session, so tables built while checking are not reused by later
+queries.
 
-#### How the candidates are found
-
-The grammar runs through the ordinary prover on `prefix` followed by an
-unbound tail, in two stages that share one inference budget and deadline.
-
-Stage 1 classifies every goal it reaches. User predicates and builtins that
-only bind variables (`=`, `call/N`, conjunction, disjunction, `true`, `fail`,
-`member/2`, `append/3`, `between/3`, `length/2`, `select/3`, `phrase/2,3` and
-the `def-dcg-rule` matchers `dcg-token-match`, `dcg-token-match-value`,
-`dcg-alt` and `dcg-opt`) run normally. Any other builtin or foreign predicate
-whose arguments share a variable with the unread input or the token being
-read does not run: the branch reports that token, or `any-p` before any read,
-and stops. A branch that reads the next token as `[T|Rest]` keeps running,
-so a guard after the terminal can reject `T` or bind a variable `T`, until it
-reads `Rest` or succeeds; it then reports `T` and stops. A branch also stops
-after 250 goals past the read and reports `T` as it was read.
-
-`\+`, `once/1`, `->`, `*->`, if-then-else, `forall/2` and `ignore/1` run in
-a scope. When the goal inside binds the unread input or the token, the
-outermost such construct runs again in a weaker form that can only add
-results: `\+ G` and `forall/2` succeed, `once(G)` becomes `G`, and
-`(C -> T ; E)` becomes `(C, T ; E)`. A cut after the read, or after such a
-weakening, is skipped, since it would prune alternatives that another next
-token takes.
-
-Stage 2 checks each ground candidate of stage 1 with `phrase-token-valid-p`
-before it is returned. `end-p` comes from running `phrase/2` on `prefix`.
-
-Each call uses its own table session, so tables built while probing are not
-reused by later queries.
-
-#### Limits
-
-The stages run under the limits of
+The checks run under the limits of
 [Inference budget and deadline](#inference-budget-and-deadline), with the
 options above and the specials `*max-prolog-depth*`,
 `*max-prolog-inferences*` and `*prolog-deadline*`. Reaching a limit signals
-`prolog-inference-limit-exceeded` or `prolog-deadline-exceeded`, and no
-completeness is claimed. `map-phrase-next-terminals` has already called
-`function` for every item found before the limit, so a caller that needs
-partial results collects them there. `end-p` is computed last, after the
-candidates. A condition that `function` does not handle is signalled again
-from `map-phrase-next-terminals`, outside the grammar.
+`prolog-inference-limit-exceeded` or `prolog-deadline-exceeded`. Pass a
+deadline when the grammar comes from a source you do not control.
 
-#### Writing grammars for completion
+#### Writing grammars for checking
 
-- Express mutually exclusive options as guards on a parse-state argument,
-  and put guards on the token after the goal that generates it:
+- Put guards on a token directly after the terminal that reads it, before
+  the next terminal; guards after the next terminal are not run.
+- Express mutually exclusive options as guards on a parse-state argument:
   `{flag(F), \+ memberchk(F, Seen)}`.
-- A generator that supplies the next token, such as `git_branch(B)`, must be
-  Prolog clauses. A foreign predicate in that position is not run, so the
-  result is `any-p`.
-- Keep grammars free of side effects (`assert`, I/O, global variables):
-  stage 1 runs branches that no concrete input would run.
+- Keep grammars free of side effects (`assert`, I/O, global variables): the
+  check stops a derivation at an arbitrary point.
 - Write lookahead as a stream predicate, `not_x(S, S) :- \+ S = [x|_].`
-  `\+ [x]` in a DCG body is not translated to a lookahead, and push-back is
-  not implemented.
-- Pass ground atoms as tokens, and always pass a deadline.
-
-`dcg-star`, `dcg-plus` and `dcg-error-recovery` are not among the builtins
-that run on the unread input, so a `def-dcg-rule` grammar that applies them
-there yields `any-p`.
+  `\+ [x]` in a DCG body is not translated to a lookahead.
 
 ## Conditions
 

@@ -302,12 +302,11 @@ whichever of its own and the enclosing bounds comes first."
 
 (defmacro %with-inference-limits ((max-inferences deadline) &body body)
   "Run BODY as one top-level query; see %CALL-WITH-INFERENCE-LIMITS."
-  ;; A query nested in a probe (a foreign predicate calling QUERY-PROLOG, say)
-  ;; is not itself probed.
+  ;; A query nested in a token check (a foreign predicate calling
+  ;; QUERY-PROLOG, say) is not itself checked.
   `(%call-with-inference-limits ,max-inferences ,deadline
                                 (lambda ()
-                                  (let ((*phrase-probe* nil)
-                                        (*phrase-probe-phase* nil))
+                                  (let ((*phrase-probe* nil))
                                     ,@body))))
 
 (defun %call-with-cleanup-inference-allowance (function)
@@ -371,11 +370,8 @@ read the clock, so that a limit the query has reached stops it there."
   "Function reporting whether a dynamically scoped constraint store is active.")
 
 (defvar *phrase-probe* nil
-  "The PHRASE-NEXT-TERMINALS probe of the running top-level query, or NIL.
-See dcg-next-terminals.lisp.")
-(defvar *phrase-probe-phase* nil
-  "The probe phase of the current proof branch: set from the moment the
-branch reads the probe's open tail until the read is confirmed, or NIL.")
+  "The PHRASE-TOKEN-VALID-P check of the running top-level query, or NIL.
+See dcg-token-check.lisp.")
 
 (defvar *caller-cut-tag* nil
   "Cut barrier of the goal invocation currently dispatching a builtin solver.

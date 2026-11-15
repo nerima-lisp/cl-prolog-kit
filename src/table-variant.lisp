@@ -94,9 +94,7 @@ cdr concatenate as the preorder sequences do."
   (cyclic-answer-index nil :type (or null hash-table))
   (delta-answers (quote ()) :type list)
   (delta-count 0 :type (integer 0 *))
-  (delta-active-p nil :type boolean)
-  ;; The PHRASE-NEXT-TERMINALS probe phase the entry was created in, if any.
-  (probe-phase nil))
+  (delta-active-p nil :type boolean))
 
 (defstruct (%table-answer (:copier nil) (:constructor %make-table-answer (term contains-variables-p cyclic-p))) "An immutable canonical answer and the replay metadata needed to instantiate it." (term nil :read-only t) (contains-variables-p nil :type boolean :read-only t) (cyclic-p nil :type boolean :read-only t))
 

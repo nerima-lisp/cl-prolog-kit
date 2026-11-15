@@ -217,8 +217,8 @@ Return (VALUES NORMALIZED-GOAL EXPLICIT-MODULE)."
       (multiple-value-bind (normalized-goal explicit-module solver)
           (%resolve-dispatch-target goal state (proof-state-bindings state)
                                     +call-context-atom+)
-        ;; The one place every goal passes, so the PHRASE-NEXT-TERMINALS
-        ;; probe classifies each goal here; see dcg-next-terminals.lisp.
+        ;; The one place every goal passes, so PHRASE-TOKEN-VALID-P
+        ;; classifies each goal here; see dcg-token-check.lisp.
         (if *phrase-probe*
             (%phrase-probe-dispatch/k normalized-goal explicit-module solver
                                       state succeed)

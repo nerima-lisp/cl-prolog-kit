@@ -57,8 +57,8 @@ unifying REST with the remaining tokens on success. A fresh, unbound
 EXPECTED-VALUE unifies with any token value, so this also implements a
 kind-only match.
 
-Under a PHRASE-NEXT-TERMINALS probe, an INPUT that is the probe's open tail
-is bound to PROBE-TOKEN followed by REST, so the probe sees the read."
+Under PHRASE-TOKEN-VALID-P, an INPUT that is the open tail after the checked
+token is bound to PROBE-TOKEN followed by REST, so the check sees the read."
   (let ((tokens (logic-substitute input environment)))
     (when (and *phrase-probe*
                (logic-var-p tokens)

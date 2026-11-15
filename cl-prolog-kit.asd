@@ -93,7 +93,7 @@
                (:file "dsl-compiler")
                (:file "dsl")
                (:file "dcg")
-               (:file "dcg-next-terminals"))
+               (:file "dcg-token-check"))
   :in-order-to ((asdf:test-op (asdf:test-op "cl-prolog-kit/test"))))
 
 (asdf:defsystem "cl-prolog-kit/weave"
@@ -181,7 +181,7 @@
                (:file "module-system-test")
                (:file "overlay-and-snapshot-test")
                (:file "dcg-test")
-               (:file "dcg-next-terminals-test")
+               (:file "dcg-token-check-test")
                (:file "weave-public-test")
                (:file "weave-quality-test"))
   :perform (asdf:test-op (op c)

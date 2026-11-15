@@ -267,9 +267,8 @@ is extensible (see DEFINE-FOREIGN-PREDICATE).")
    #:def-dcg-rule
    #:phrase
    #:phrase-all
-   #:phrase-next-terminals
-   #:map-phrase-next-terminals
    #:phrase-token-valid-p
+   #:phrase-filter-candidates
    #:dcg-alt
    #:dcg-opt
    #:dcg-star
