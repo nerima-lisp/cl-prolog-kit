@@ -17,8 +17,9 @@
 (defparameter *max-prolog-inferences* nil
   "Default inference budget of one top-level query; NIL means unbounded.
 
-One inference is one goal dispatch.  A query that needs more raises
-PROLOG-INFERENCE-LIMIT-EXCEEDED.")
+One inference is one goal dispatch, one solution produced by a builtin or
+foreign predicate, or one candidate examined by a builtin that searches.  A
+query that needs more raises PROLOG-INFERENCE-LIMIT-EXCEEDED.")
 
 (defparameter *prolog-deadline* nil
   "Default absolute GET-INTERNAL-REAL-TIME deadline of a top-level query, or
