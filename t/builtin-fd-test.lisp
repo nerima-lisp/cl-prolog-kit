@@ -126,3 +126,58 @@
   (let* ((rulebase (make-rulebase))
          (query (%read-prolog-query rulebase "X in 1..5, indomain(X), X =:= 1.")))
     (is (prolog-succeeds-p rulebase query))))
+
+(defun reference-fd-values-supported-by (operator own-domain other-domain own-position)
+  "The pairwise support test the linear version replaced."
+  (remove-if-not
+   (lambda (own-value)
+     (some (lambda (other-value)
+             (ecase own-position
+               (:left (cl-prolog-kit::%fd-relation-true-p operator own-value other-value))
+               (:right (cl-prolog-kit::%fd-relation-true-p operator other-value own-value))))
+           other-domain))
+   own-domain))
+
+(deftest fd-support-matches-the-pairwise-reference ()
+  (let ((domains '(() (5) (1 2 3) (2 4 6 8) (-3 0 3) (1 2 3 4 5 6 7 8 9 10) (7 9))))
+    (dolist (operator '(|#<| |#=<| |#>| |#>=| |#=| |#\\=|))
+      (dolist (position '(:left :right))
+        (dolist (own domains)
+          (dolist (other domains)
+            (is-equal (reference-fd-values-supported-by operator own other position)
+                      (cl-prolog-kit::%fd-values-supported-by
+                       operator own other position)
+                      (format nil "~S ~S ~S ~S" operator position own other))))))))
+
+(deftest fd-relation-between-large-domains-is-linear ()
+  (let ((rulebase (make-rulebase))
+        ;; CPU time, so a loaded machine does not fail the bound.
+        (start (get-internal-run-time)))
+    (is (query-prolog rulebase
+                      '(and (in ?x (1 |..| 200000))
+                            (in ?y (1 |..| 200000))
+                            (|#<| ?x ?y)
+                            (|#\\=| ?x ?y)
+                            (|#=<| ?y 200000))
+                      :limit 1))
+    (is (query-prolog rulebase
+                      '(and (in ?x (1 |..| 200000))
+                            (in ?y (100001 |..| 300000))
+                            (|#=| ?x ?y))
+                      :limit 1))
+    ;; The pairwise version needed hours here; a generous bound keeps the
+    ;; test stable on a loaded machine.
+    (is (< (/ (- (get-internal-run-time) start) internal-time-units-per-second)
+           1))))
+
+(deftest fd-pair-propagation-keeps-solutions-and-order ()
+  (let ((expected
+          (loop for x from 1 to 6
+                append (loop for y from 2 to 8
+                             when (and (< x y) (/= x 3) (/= x y))
+                               collect (list (cons '?x x) (cons '?y y))))))
+    (is-equal expected
+              (query-prolog (make-rulebase)
+                            '(and (in ?x (1 |..| 6)) (in ?y (2 |..| 8))
+                                  (|#<| ?x ?y) (|#\\=| ?x 3) (|#\\=| ?x ?y)
+                                  (labeling () (?x ?y)))))))

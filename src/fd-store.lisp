@@ -10,8 +10,18 @@
 
 (defparameter *fd-store* (%make-fd-store nil nil))
 
+(defun %fd-strictly-increasing-p (values)
+  (loop for (left right) on values
+        while right
+        always (< left right)))
+
 (defun %fd-domain (values)
-  (sort (remove-duplicates (copy-list values)) #'<))
+  "Return VALUES as a sorted duplicate-free domain.
+Propagation results are already in that form, so they are returned unchanged
+instead of being copied, deduplicated and sorted again."
+  (if (%fd-strictly-increasing-p values)
+      values
+      (sort (remove-duplicates (copy-list values)) #'<)))
 
 (declaim (ftype function %check-builtin-output-length))
 
@@ -62,10 +72,19 @@ Domains are stored as explicit lists, so the interval size is bounded by
   "Return CURRENT's values that also occur in ALLOWED, in linear time.
 CL:INTERSECTION is quadratic, which a domain near the output limit turns
 into a host-blocking loop."
-  (let ((members (make-hash-table :test #'eql :size (length allowed))))
-    (dolist (value allowed)
-      (setf (gethash value members) t))
-    (remove-if-not (lambda (value) (gethash value members)) current)))
+  (if (and (%fd-strictly-increasing-p current)
+           (%fd-strictly-increasing-p allowed))
+      ;; Both sorted: merge instead of hashing.
+      (loop with rest = allowed
+            for value in current
+            do (loop while (and rest (< (first rest) value))
+                     do (pop rest))
+            when (and rest (= (first rest) value))
+              collect value)
+      (let ((members (make-hash-table :test #'eql :size (length allowed))))
+        (dolist (value allowed)
+          (setf (gethash value members) t))
+        (remove-if-not (lambda (value) (gethash value members)) current))))
 
 (defun %fd-restrict-domain (store variable allowed)
   (let* ((current (%fd-domain-of store variable))
@@ -128,15 +147,43 @@ into a host-blocking loop."
 
 (defun %fd-values-supported-by (operator own-domain other-domain own-position)
   "Return the subset of OWN-DOMAIN whose OWN-POSITION (:LEFT or :RIGHT) role
-in OPERATOR's relation is satisfied by some value in OTHER-DOMAIN."
-  (remove-if-not
-   (lambda (own-value)
-     (some (lambda (other-value)
-             (ecase own-position
-               (:left (%fd-relation-true-p operator own-value other-value))
-               (:right (%fd-relation-true-p operator other-value own-value))))
-           other-domain))
-   own-domain))
+in OPERATOR's relation is satisfied by some value in OTHER-DOMAIN.
+
+Each test runs in constant time against a summary of OTHER-DOMAIN (its bounds,
+a membership table, or a second distinct value), so the cost is linear in the
+two domain sizes.  Pairwise testing was quadratic, which domains near
+*MAX-PROLOG-BUILTIN-OUTPUT-LENGTH* turn into a builtin call no limit can
+interrupt.  OWN-DOMAIN's order is preserved."
+  (when (null other-domain)
+    (return-from %fd-values-supported-by '()))
+  ;; With OWN on the right, OPERATOR's sides swap: other < own is own > other.
+  (let ((relation (if (eq own-position :left)
+                      operator
+                      (ecase operator
+                        (|#<| '|#>|) (|#=<| '|#>=|) (|#>| '|#<|) (|#>=| '|#=<|)
+                        ((|#=| |#\\=|) operator)))))
+    (case relation
+      ((|#<| |#=<|)
+       (let ((upper (reduce #'max other-domain)))
+         (remove-if-not (lambda (value) (%fd-relation-true-p relation value upper))
+                        own-domain)))
+      ((|#>| |#>=|)
+       (let ((lower (reduce #'min other-domain)))
+         (remove-if-not (lambda (value) (%fd-relation-true-p relation value lower))
+                        own-domain)))
+      (|#=|
+       (let ((members (make-hash-table :test #'eql)))
+         (dolist (value other-domain)
+           (setf (gethash value members) t))
+         (remove-if-not (lambda (value) (gethash value members)) own-domain)))
+      (|#\\=|
+       ;; Some other value differs from VALUE unless OTHER-DOMAIN holds only
+       ;; VALUE itself.
+       (let* ((first (first other-domain))
+              (second-distinct-p (find first other-domain :test-not #'eql)))
+         (if second-distinct-p
+             (copy-list own-domain)
+             (remove first own-domain :test #'eql)))))))
 
 (defun %fd-filter-variable-pair (store left right operator)
   (let ((left-domain (%fd-domain-of store left))
