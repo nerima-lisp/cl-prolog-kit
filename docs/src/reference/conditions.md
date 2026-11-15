@@ -40,9 +40,11 @@ subclasses of `prolog-resource-error` and carry an ISO
 `resource_error(inferences)` or `resource_error(deadline)` term, but Prolog
 `catch/3` does not intercept them: like `halt`, they always reach the Lisp
 caller. Cleanup goals of `setup_call_cleanup/3` and `call_cleanup/2` still run
-while the stack unwinds, on a small shared allowance; a cleanup that exhausts
-it raises the same conditions, and then the reader of
-`prolog-inference-limit-exceeded` returns the allowance (1000). Invalid limit values signal a plain `type-error`. See
+while the stack unwinds, on a small shared allowance. A cleanup that reaches
+a limit while the query has already reached one is abandoned, and the stop
+that was unwinding reaches the caller; otherwise the cleanup raises the same
+conditions, and then the reader of `prolog-inference-limit-exceeded` returns
+the allowance (1000). Invalid limit values signal a plain `type-error`. See
 [Runtime Resource Limits](api.md#inference-budget-and-deadline) for how the
 limits are counted and how nested queries share them.
 
@@ -55,8 +57,9 @@ limits are counted and how nested queries share them.
 It is a `prolog-resource-error` carrying `resource_error(control_stack)`, and
 Prolog `catch/3` intercepts it. A cleanup goal of `setup_call_cleanup/3` or
 `call_cleanup/2` stops at a ceiling up to 224 KiB past the 80% mark instead;
-when it runs while a stack already past the limit unwinds, that stop is
-discarded. See [Control stack](api.md#control-stack).
+after a stack stop, a cleanup that reaches the ceiling is abandoned and the
+stack error continues. See
+[Inference budget and deadline](api.md#inference-budget-and-deadline).
 
 ## Structurally invalid goals
 

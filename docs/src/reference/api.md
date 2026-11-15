@@ -364,12 +364,33 @@ throw, a failure, or a success, so a stopped query can still release what it
 holds. Cleanups nested inside other cleanups, and queries that cleanups
 start, do not add to this: together they stay within 1000 inferences past
 the limit of the innermost query that set one, and within 500 ms past its
-deadline. A cleanup goal checks the deadline at its first inference and then
-at the adaptive interval described for `*prolog-deadline*`. A cleanup that
-exhausts its allowance raises the same two conditions, and
-`prolog-inference-limit-exceeded-limit` then returns 1000, even when an
-enclosing cleanup had already used part of the allowance; for any other stop
-it returns the limit that was exceeded.
+deadline. A cleanup goal also runs under the control stack ceiling
+described under [Control stack](#control-stack). When it starts, it checks
+the ceiling first and the deadline second; after that it checks the ceiling
+at every goal dispatch and the deadline at the adaptive interval described
+for `*prolog-deadline*`.
+
+A cleanup goal that reaches its inference allowance, its grace period or the
+stack ceiling is handled by one rule, which depends on the state of the
+query when the cleanup starts:
+
+- If the stack is unwinding (after a stop, an exception, or an early exit
+  such as `once/1`) and the query has already reached one of its limits (the
+  stack pointer is past the control stack limit, the inferences are at the
+  limit, or the deadline has passed), the cleanup is abandoned. Its own stop
+  reaches neither Prolog nor the host, the rest of the cleanup goal does not
+  run, and the exit already under way continues to the next cleanup and on to
+  its handler. The next inference charged after the cleanup checks every
+  limit again, so a query that reached its inference limit or deadline still
+  stops on it.
+- Otherwise its stop propagates like any other. Then
+  `prolog-inference-limit-exceeded-limit` returns 1000, even when an
+  enclosing cleanup had already used part of the allowance; for any other
+  stop it returns the limit that was exceeded.
+
+Do not rely on a cleanup that runs after a limit stop finishing
+work that needs more than one allowance, one grace period or the stack
+ceiling.
 
 A stop does not stay caught. When host code handles the condition and
 continues, or `catch/3` catches a ball that a cleanup threw in place of the
@@ -424,13 +445,10 @@ rec(N) :-
 ?- catch(rec(0), error(resource_error(control_stack), _), true).
 ```
 
-A cleanup goal that reaches the ceiling stops with the same resource error,
-with one exception. If the cleanup runs because an exception (such as the
-stack error) or another exit that started past the limit is unwinding the
-stack, the cleanup's own resource error is discarded without any notice to
-Prolog or the host. The rest of that cleanup goal does not run, and the exit
-already under way continues to the next cleanup and the `catch/3`. Do not rely
-on such a cleanup finishing work that needs more stack than the ceiling allows.
+A cleanup goal that reaches the ceiling is handled by the rule in
+[Inference budget and deadline](#inference-budget-and-deadline). After a
+stack stop it is abandoned, and the stack error continues to the next
+cleanup and the `catch/3`.
 
 Some term walks do not go through that check. In v1.6.0 these known cases
 still end the process under `--script`; the sizes are for arm64 macOS with

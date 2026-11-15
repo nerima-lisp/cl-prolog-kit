@@ -318,13 +318,14 @@ nest(N) :- N1 is N - 1, setup_call_cleanup(true, nest(N1), (assertz(ran), lp))."
 (deftest cleanup-allowance-has-a-deadline ()
   ;; The query trips its inference budget; the cleanup's few inferences are
   ;; each expensive, so only the grace period past the query's deadline
-  ;; stops it.  The stop reports D + G, the deadline the cleanup ran under,
-  ;; and no expensive call starts once it has passed.  Neither depends on
-  ;; how many calls the cleanup reached.  A root without a deadline bounds
-  ;; its cleanups by the allowance alone.
+  ;; stops it, and no expensive call starts once D + G has passed.  The
+  ;; cleanup runs while the query is past its limit, so its own stop is
+  ;; dropped and the host receives the inference stop that started the
+  ;; unwind.  Neither depends on how many calls the cleanup reached.  A
+  ;; root without a deadline bounds its cleanups by the allowance alone.
   (let* ((*limits-test-late-calls* 0)
          (deadline (prolog-deadline-after 1/10))
-         (condition (limits-test-condition (prolog-deadline-exceeded)
+         (condition (limits-test-condition (prolog-inference-limit-exceeded)
                       (query-prolog (make-rulebase)
                                     '(setup_call_cleanup
                                       true (and (repeat) (fail))
@@ -336,8 +337,7 @@ nest(N) :- N1 is N - 1, setup_call_cleanup(true, nest(N1), (assertz(ran), lp))."
                                     :deadline deadline))))
     (is condition)
     (when condition
-      (is-equal (+ deadline cl-prolog-kit::*inference-limit-cleanup-grace*)
-                (prolog-deadline-exceeded-deadline condition)))
+      (is-equal 1000 (prolog-inference-limit-exceeded-limit condition)))
     (is (<= *limits-test-late-calls* 1))))
 
 (define-foreign-predicate (limits-test-nested-loop budget)
@@ -595,18 +595,19 @@ was asserted."
     (is ran-p)
     (is-equal 4 (prolog-inference-limit-exceeded-limit condition)))
   ;; 499 rounds need more than the allowance: the nested query's own
-  ;; budget cannot lift the cleanup's cap, nothing is left for assertz/1,
-  ;; and the stop reports the allowance.
+  ;; budget cannot lift the cleanup's cap, and nothing is left for
+  ;; assertz/1.  The cleanup runs while the query is past its limit, so its
+  ;; stop is dropped and the outer query's stop propagates.
   (multiple-value-bind (condition ran-p)
       (limits-test-cleanup-spending 499 1000000000)
     (is (not ran-p))
-    (is-equal cl-prolog-kit::*inference-limit-cleanup-allowance*
-              (prolog-inference-limit-exceeded-limit condition)))
-  ;; A smaller budget of its own still applies.
+    (is-equal 4 (prolog-inference-limit-exceeded-limit condition)))
+  ;; A smaller budget of its own still applies, and its stop is dropped
+  ;; the same way.
   (multiple-value-bind (condition ran-p)
       (limits-test-cleanup-spending 100 10)
     (is (not ran-p))
-    (is-equal 10 (prolog-inference-limit-exceeded-limit condition))))
+    (is-equal 4 (prolog-inference-limit-exceeded-limit condition))))
 
 ;;; One root query uses at most its limit L plus one cleanup allowance R,
 ;;; and stops by its deadline D plus one grace period G, however its queries
@@ -712,8 +713,10 @@ or NIL, and how many such conditions were signalled during the call."
                          :max-inferences 30
                          :deadline (prolog-deadline-after 1))))
       (is condition)
-      ;; The loop's stop, the recovery's, and the later cleanup's.
-      (is-equal 3 stops))
+      ;; The loop's stop and the recovery's.  The later cleanup runs while
+      ;; the query is past its limit, so the stop it reaches at L + R is
+      ;; dropped inside it and reaches no host handler.
+      (is-equal 2 stops))
     (is-equal 1 (limits-test-count rulebase 'thrown))
     (is (plusp (limits-test-count rulebase 'tick)))
     (is (<= (limits-test-count rulebase 'tick) (limits-test-max-ticks 30)))))
@@ -873,8 +876,9 @@ innermost records its deadline and loops."
   ;; The root has no inference limit, so only the nested query's own
   ;; ceiling, 10 + R, stops the recursion.  Without it the recursion ends
   ;; in control stack exhaustion or at the deadline, neither of which is an
-  ;; inference stop; the stop reports the cleanup allowance, the limit of
-  ;; the cleanup that hit the ceiling.
+  ;; inference stop.  Every cleanup runs while the nested query is past its
+  ;; limit, so the stop of the one that hit the ceiling is dropped and the
+  ;; nested query's own stop, at 10, propagates.
   (let ((condition (limits-test-condition (prolog-inference-limit-exceeded)
                      (query-prolog (limits-test-cleanup-rules)
                                    '(limits-test-recursive-cleanup-with-own-limit)
@@ -882,8 +886,7 @@ innermost records its deadline and loops."
                                    :deadline (prolog-deadline-after 1/2)))))
     (is condition)
     (when condition
-      (is-equal cl-prolog-kit::*inference-limit-cleanup-allowance*
-                (prolog-inference-limit-exceeded-limit condition)))))
+      (is-equal 10 (prolog-inference-limit-exceeded-limit condition)))))
 
 (define-foreign-predicate (limits-test-sleep milliseconds) (rulebase environment depth emit)
   (declare (cl:ignore rulebase depth))

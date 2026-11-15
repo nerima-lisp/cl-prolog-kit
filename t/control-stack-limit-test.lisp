@@ -119,14 +119,18 @@ Return the PROLOG-STACK-LIMIT-EXCEEDED it raised, or :FINISHED."
 ;;; every cleanup starts past the limit and runs within the cleanup margin.
 
 (defparameter +stack-cleanup-rules+
-  ":- dynamic(copied/1).
+  ":- dynamic(closed/1).
+:- dynamic(copied/1).
 lv(I) :- assertz(level(I)), I1 is I + 1, lv(I1).
 rec(N) :- setup_call_cleanup(assertz(opened(N)), (N1 is N + 1, rec(N1)),
                              assertz(closed(N))).
 rec_deep(N) :- setup_call_cleanup(assertz(opened(N)),
                                   (N1 is N + 1, rec_deep(N1)),
                                   (assertz(closed(N)), deep(T), copy_term(T, _),
-                                   assertz(copied(N)))).")
+                                   assertz(copied(N)))).
+rec_spin(N) :- setup_call_cleanup(assertz(opened(N)),
+                                  (N1 is N + 1, rec_spin(N1)),
+                                  (repeat, fail)).")
 
 (defun stack-cleanup-count (rulebase text)
   (length (query-prolog rulebase (read-prolog-term text))))
@@ -173,21 +177,33 @@ symbols with their package and binds only CL-USER ones."
                  (dotimes (level 4000 term)
                    (setf term (list (intern \"F\" \"CL-PROLOG-KIT.USER-ATOMS\")
                                     term)))))
-(flet ((run (text)
-         (let ((rulebase (cl-prolog-kit:consult-prolog
-                          ~S (cl-prolog-kit:make-rulebase))))
+(flet ((run (spec)
+         (destructuring-bind (text &optional max-inferences deadline-seconds)
+             (if (stringp spec) (list spec) spec)
+          (let ((rulebase (cl-prolog-kit:consult-prolog
+                           ~S (cl-prolog-kit:make-rulebase))))
            (flet ((solutions (goal)
                     (length (cl-prolog-kit:query-prolog rulebase goal)))
                   (read-goal (text)
                     (cl-prolog-kit:read-prolog-term text)))
-             (list (solutions (subst-if *deep*
-                                        (lambda (x)
-                                          (and (symbolp x)
-                                               (string= (symbol-name x) \"?DEEP\")))
-                                        (read-goal text)))
+             (list (handler-case
+                       (length
+                        (cl-prolog-kit:query-prolog
+                         rulebase
+                         (subst-if *deep*
+                                   (lambda (x)
+                                     (and (symbolp x)
+                                          (string= (symbol-name x) \"?DEEP\")))
+                                   (read-goal text))
+                         :max-inferences max-inferences
+                         :deadline (and deadline-seconds
+                                        (cl-prolog-kit:prolog-deadline-after
+                                         deadline-seconds))))
+                     (cl-prolog-kit:prolog-deadline-exceeded () :deadline)
+                     (cl-prolog-kit:prolog-inference-limit-exceeded () :inferences))
                    (solutions (read-goal \"opened(X).\"))
                    (solutions (read-goal \"closed(X).\"))
-                   (solutions (read-goal \"copied(X).\")))))))
+                   (solutions (read-goal \"copied(X).\"))))))))
   (print (cons cl-prolog-kit::*control-stack-limit-fraction*
                (mapcar #'run '~S))))
 "
@@ -261,31 +277,45 @@ store) does not reach it."
       (uiop:delete-directory-tree directory :validate t :if-does-not-exist :ignore))))
 
 (deftest cleanups-after-a-stack-stop-run-at-the-shipped-limit (:timeout 120)
-  ;; A child SBCL loads the system and runs about 2000 levels of proof
-  ;; search, so this takes longer than the default timeout.  Run at the
-  ;; shipped fraction, where before the cleanup margin the
-  ;; cleanups of rec/1 stopped again one on top of the other until SBCL
+  ;; A child SBCL loads the system and runs about 4000 levels of proof
+  ;; search and a 5 s deadline, so this takes longer than the default
+  ;; timeout.  Run at the shipped fraction, where before the cleanup margin
+  ;; the cleanups of rec/1 stopped again one on top of the other until SBCL
   ;; ended the process.  Every cleanup runs at about the depth of the stop
   ;; and fits in the margin, so each opened level is closed.  In rec_deep/1
   ;; each cleanup then copies a term too deep for the margin and stops at
   ;; the ceiling, so none reaches copied/1; that stop is dropped while the
   ;; first one unwinds, so catch/3 still receives the resource error.
+  ;;
+  ;; In rec_spin/1 each cleanup runs until its deadline grace, or its
+  ;; inference allowance, runs out.  Those stops are dropped the same way:
+  ;; before they were, the deadline one was raised again at the entry of
+  ;; every outer cleanup, deeper each time, until SBCL ended the process.
+  ;; catch/3 receives the stack error, and the next charge after it stops
+  ;; the query on the limit it has passed, which reaches the host.
   (let ((runtime (stack-cleanup-child-runtime)))
     (multiple-value-bind (code output-tail fraction results)
         (stack-cleanup-child-results
          runtime
          '("catch(rec(0), error(resource_error(control_stack), _), true)."
            "assertz(deep(Deep)),
-            catch(rec_deep(0), error(resource_error(control_stack), _), true)."))
+            catch(rec_deep(0), error(resource_error(control_stack), _), true)."
+           ("catch(rec_spin(0), error(resource_error(control_stack), _), true)."
+            nil 5)
+           ("catch(rec_spin(0), error(resource_error(control_stack), _), true)."
+            100000 nil)))
       ;; The executable and the child's output show in the failure report
       ;; when the child did not exit with code 0.
       (is-equal (list runtime 0 nil) (list runtime code output-tail))
       (is-equal 4/5 fraction)
-      (is-equal 2 (length results))
-      (loop for (solutions opened closed) in results
-            do (is-equal 1 solutions)
-               ;; A quarter of the stack holds about 300 levels of rec/1.
+      (is-equal 4 (length results))
+      ;; A quarter of the stack holds about 300 levels of rec/1.
+      (loop for (outcome opened closed) in (subseq results 0 2)
+            do (is-equal 1 outcome)
                (is (> opened 600))
                (is-equal opened closed))
-      (is-equal 0 (fourth (second results))))))
-
+      (is-equal 0 (fourth (second results)))
+      (loop for (outcome opened) in (subseq results 2)
+            for expected in '(:deadline :inferences)
+            do (is-equal expected outcome)
+               (is (> opened 600))))))

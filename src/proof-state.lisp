@@ -326,6 +326,9 @@ cleanup gets no more stack than the outer one."
            (and deadline (%min* (+ deadline *inference-limit-cleanup-grace*)
                                 *inference-deadline-ceiling*)))
          (*inference-check-at* *inference-check-at*))
+    ;; The stack first: a cleanup that starts past the ceiling stops on it
+    ;; before a deadline that has passed can stop it.
+    (%check-control-stack)
     (%restart-inference-deadline-polling)
     (setf *inference-check-at* (%inference-next-check))
     (funcall function)))
@@ -333,6 +336,29 @@ cleanup gets no more stack than the outer one."
 (defmacro %with-cleanup-inference-allowance (&body body)
   "Run BODY, a cleanup goal; see %CALL-WITH-CLEANUP-INFERENCE-ALLOWANCE."
   `(%call-with-cleanup-inference-allowance (lambda () ,@body)))
+
+(deftype %limit-stop ()
+  "The conditions a query's control stack, inference and deadline limits
+raise."
+  '(or prolog-stack-limit-exceeded prolog-inference-limit-exceeded
+    prolog-deadline-exceeded))
+
+(defun %query-limit-reached-p ()
+  "Return true when the running query has reached a limit in force: the
+stack pointer is past *CONTROL-STACK-LIMIT*, *INFERENCE-USED* is at the cap,
+or the deadline has passed.  A query in this state stops at its next goal
+dispatch or charge, whatever runs before it; a stop leaves it in this state."
+  (or (%control-stack-past-limit-p)
+      (and *inference-cap* (>= *inference-used* *inference-cap*))
+      (and *inference-deadline*
+           (>= (get-internal-real-time) *inference-deadline*))))
+
+(defun %force-next-limit-check ()
+  "Make the next charge consult the cap and, while a deadline is in force,
+read the clock, so that a limit the query has reached stops it there."
+  (setf *inference-check-at* (min *inference-check-at* *inference-used*))
+  (when *inference-deadline*
+    (setf *inference-poll-at* (min *inference-poll-at* *inference-used*))))
 
 (defvar *constraint-post-unify-hook* nil
   "Function called after builtin =/2 extends an environment.")

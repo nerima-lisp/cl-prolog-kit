@@ -176,10 +176,13 @@ CLEANUP failure is ignored, while a condition raised by CLEANUP propagates,
 with one exception.  SBCL runs the unwind-protect cleanup of a non-local exit
 on top of the stack where the exit started, and a condition the cleanup
 raises starts a new exit from deeper still, under which the next enclosing
-cleanup runs.  So when a non-local exit that started past the stack limit
-runs a cleanup that stops at the stack ceiling, that stop is dropped and the
-exit already under way continues; otherwise each of many nested cleanups
-would stop again a little deeper until SBCL's guard page ends the process."
+cleanup runs.  So a cleanup that runs during a non-local exit while the query
+has already reached a limit (%QUERY-LIMIT-REACHED-P) and stops on any limit,
+the stack ceiling, its inference allowance or its deadline grace, is
+abandoned: its stop is dropped and the exit already under way continues.
+Otherwise each of many nested cleanups would stop again a little deeper
+until SBCL's guard page ends the process.  The next charge after it checks
+the limits again, so the query still stops on the limit it reached."
   (multiple-value-bind (setup-environment setup-succeeded-p)
       (%first-proof-environment
        (%resolve-callable-goal setup environment operation)
@@ -198,9 +201,11 @@ would stop again a little deeper until SBCL's guard page ends the process."
                  (run-cleanup (unwinding-p)
                    (unless cleanup-ran-p
                      (setf cleanup-ran-p t)
-                     (if (and unwinding-p (%control-stack-past-limit-p))
+                     (if (and unwinding-p (%query-limit-reached-p))
                          (handler-case (prove-cleanup)
-                           (prolog-stack-limit-exceeded () nil))
+                           (%limit-stop ()
+                             (%force-next-limit-check)
+                             nil))
                          (prove-cleanup)))))
           (unwind-protect
                (multiple-value-prog1
