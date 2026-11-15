@@ -119,6 +119,16 @@ not_z(S, S) :- \\+ S = [z|_].
 look_after --> [X], { tok(X) }, not_z, [_].
 peek_x(S, S) :- \\+ \\+ S = [x|_].
 peek --> peek_x, [x].
+:- table(rt/1).
+rt([a]).
+replay_cut(S, []) :- findall(L, rt(L), _), S = [x|T], rt(T), !, fail.
+replay_cut --> [x, b].
+nb(S, S) :- \\+ S = [a|_].
+neg_bind --> [x], nb, [_].
+nr(S, S) :- findall(L, rt(L), _), \\+ rt(S).
+neg_replay --> [x], nr, [_].
+cb(S, S) :- findall(z, S = [a|_], L), L == [].
+coll_bind --> [x], cb, [_].
 :- table(tw/2).
 tw --> [a], tw.
 tw --> [b]."
@@ -139,7 +149,8 @@ token.")
     ("var_tail" "[]") ("explicit" "[]") ("via_append" "[]") ("g4" "[]") ("fa" "[]")
     ("expr" "[1]") ("as" "[a]") ("nb" "[]") ("gen_after_foreign" "[]")
     ("gen_before_foreign" "[]") ("look_after" "[]") ("peek" "[]") ("tw" "[]")
-    ("tw" "[a]"))
+    ("tw" "[a]") ("replay_cut" "[]") ("neg_bind" "[]") ("neg_replay" "[]")
+    ("coll_bind" "[]"))
   "(NONTERMINAL PREFIX) pairs over the corpus, as Prolog text.")
 
 (defun token-check-corpus-cases ()
@@ -178,8 +189,6 @@ token.")
                                               ("gen_after" "[]" "feature")
                                               ("c4" "[]" "f(a)")
                                               ("num" "[]" "seven")
-                                              ("look" "[]" "x")
-                                              ("peek" "[]" "y")
                                               ("ite_read" "[a]" "c")
                                               ("tw" "[]" "c"))
           do (is-equal (list nonterminal token nil)
@@ -187,6 +196,17 @@ token.")
                              (phrase-token-valid-p rulebase
                                                    (read-prolog-term nonterminal)
                                                    (read-prolog-term prefix)
+                                                   (read-prolog-term token)
+                                                   :max-inferences 200000))))
+    ;; No input continues these either, but their lookahead is a negation
+    ;; over the stream after the token (\+ S = [x|_], \+ \+ S = [x|_]).  A
+    ;; negation that reaches the open tail is not run, so the check accepts:
+    ;; a lookahead written with negation cannot make it reject.
+    (loop for (nonterminal token) in '(("look" "x") ("peek" "y"))
+          do (is-equal (list nonterminal token t)
+                       (list nonterminal token
+                             (phrase-token-valid-p rulebase
+                                                   (read-prolog-term nonterminal) '()
                                                    (read-prolog-term token)
                                                    :max-inferences 200000))))))
 
@@ -220,6 +240,12 @@ sv_eq(S, S) :- S \\== [x].
 sv_memberchk(S, S) :- memberchk(_, S).
 sv_copy(S, S) :- copy_term(S, C), C \\= [x|_].
 sv_foreign(S, S) :- nt_stream_ok(S).
+:- table(tq/1).
+tq([x]).
+m_replay_rest --> [w], rq, [y].
+rq(S, S) :- findall(L, tq(L), _), \\+ tq(S).
+m_replay_cut(S, []) :- findall(L, tq(L), _), S = [w|T], tq(T), !, fail.
+m_replay_cut --> [w], [y].
 nest --> peek_x, [x].
 nest --> [y].
 peek_x(S, S) :- \\+ \\+ S = [x|_].
@@ -258,7 +284,7 @@ relaxed_cut --> ( not_x -> { true } ; [x] ), !, [y].
                         (append (loop for name in *token-check-construct-names*
                                       append (loop for position in '("state" "stream" "token" "rest")
                                                    collect (format nil "m_~A_~A" name position)))
-                                '("nest" "relaxed_cut"))
+                                '("nest" "relaxed_cut" "m_replay_rest" "m_replay_cut"))
                       append (loop for prefix in '("[]" "[w]")
                                    collect (list (read-prolog-term nonterminal)
                                                  (read-prolog-term prefix))))))
@@ -451,3 +477,35 @@ fd_guarded --> { X in 1..2 }, [X], [b].")
               (token-check-nested-query none)
               (= ?s0 (?x . ?s))))
      'nested-guard '() 'a)))
+
+(deftest token-check-accepts-tails-bound-where-no-goal-follows ()
+  ;; Each grammar binds the open tail where no further goal is dispatched
+  ;; before the derivation fails: by a table replay that a cut then commits
+  ;; to, or inside a construct that keeps only success or the collected
+  ;; solutions.  phrase/2 accepts x b for all of them, so x must be valid.
+  (dolist (source '(":- table(t/1).
+t([a]).
+g(S, []) :- findall(L, t(L), _), S = [x|T], t(T), !, fail.
+g --> [x, b]."
+                    "nb(S, S) :- \\+ S = [a|_].
+g --> [x], nb, [_]."
+                    "ob(S, S) :- \\+ once(S = [a|_]).
+g --> [x], ob, [_]."
+                    "na(S, S) :- \\+ append([a], _, S).
+g --> [x], na, [_]."
+                    ":- table(t/1).
+t([a]).
+nt(S, S) :- findall(L, t(L), _), \\+ t(S).
+g --> [x], nt, [_]."
+                    "fc(S, S) :- findall(z, S = [a|_], L), L == [].
+g --> [x], fc, [_]."))
+    (let ((rulebase (consult-prolog source))
+          (g (read-prolog-term "g")))
+      (is-equal (list source t)
+                (list source (nth-value 1 (query-prolog-first
+                                           rulebase (read-prolog-term "phrase(g, [x, b])")))))
+      (is-equal (list source t)
+                (list source (phrase-token-valid-p rulebase g '() (read-prolog-term "x"))))
+      (is-equal (list source (list (read-prolog-term "x")))
+                (list source (phrase-filter-candidates rulebase g '()
+                                                       (list (read-prolog-term "x"))))))))

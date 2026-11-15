@@ -1,18 +1,21 @@
 ;;;; PHRASE-TOKEN-VALID-P: whether a typed token can continue a partial input.
 ;;;;
 ;;;; The grammar runs through the ordinary prover on PREFIX ++ [TOKEN|R],
-;;;; with R unbound, and the check accepts as soon as the derivation binds R,
-;;;; passes R to a builtin or foreign predicate that might test it, or
+;;;; with R unbound.  The check accepts when a goal is dispatched while R is
+;;;; bound, when a goal that might test R would run, or when the derivation
 ;;;; succeeds.  It rejects only when the search is exhausted first, so a
 ;;;; rejection means no input starting with PREFIX ++ [TOKEN] is a phrase.
 ;;;;
-;;;; Every goal passes %PHRASE-PROBE-DISPATCH/K.  Builtins that only bind
-;;;; their arguments run, and R is checked after them because some bind it
-;;;; without the post-unification hook (append/3).  Control constructs whose
-;;;; inner goals are dispatched themselves run as usual.  Any other builtin
-;;;; or foreign predicate whose arguments reach R is not run: it could test
-;;;; R, so the check accepts.  Builtins are recognized by their solver, so a
-;;;; foreign predicate that shares a builtin's name is not taken for it.
+;;;; Every goal passes %PHRASE-PROBE-DISPATCH/K, which checks R first.  User
+;;;; predicates, builtins that only bind their arguments, and control
+;;;; constructs that carry their inner goal's bindings into the continuation
+;;;; run as usual: whatever binds R inside them is seen at the next dispatch
+;;;; or at the solution.  Any other builtin or foreign predicate whose
+;;;; arguments reach R is not run, and the check accepts.  That includes the
+;;;; constructs that prove a goal and then drop its bindings (\+, forall/2,
+;;;; findall/3): they decide their result after R is bound without
+;;;; dispatching anything more.  Builtins are recognized by their solver, so
+;;;; a foreign predicate that shares a builtin's name is not taken for it.
 
 (in-package #:cl-prolog-kit)
 
@@ -42,10 +45,10 @@ of a concrete input.")
 
 (defparameter *phrase-probe-control-solvers*
   (%phrase-probe-solvers
-   '("\\+ a" "once(a)" "(a -> b)" "(a -> b ; c)" "(a *-> b ; c)"
-     "forall(a, b)" "ignore(a)"))
-  "Solvers of control constructs that prove their inner goals through the
-dispatcher, where those goals are classified in turn.")
+   '("once(a)" "ignore(a)" "(a -> b)" "(a -> b ; c)" "(a *-> b)" "(a *-> b ; c)"
+     "catch(a, b, c)"))
+  "Solvers of control constructs that pass their inner goal's bindings on to
+the continuation, so a binding of R inside them reaches the next dispatch.")
 
 (defstruct (%phrase-probe (:constructor %make-phrase-probe (tail accept-tag)))
   "The open tail one token check watches and where it throws on acceptance."
@@ -58,7 +61,7 @@ dispatcher, where those goals are classified in turn.")
 (defun %phrase-probe-tail-bound-p (environment)
   "True when the tail is bound to a non-variable in ENVIRONMENT, an alist of
 bindings.  Chasing the alist directly avoids building an index on every
-unification."
+dispatch."
   (let ((term (%phrase-probe-tail *phrase-probe*)))
     (loop repeat 64
           do (let ((binding (assoc term environment :test #'eq)))
@@ -73,31 +76,15 @@ unification."
   "True when VARIABLE, an unbound input stream, is the checked token's tail."
   (eq variable (%walk-term (%phrase-probe-tail *phrase-probe*) environment)))
 
-(defun %make-phrase-probe-hook (previous)
-  "Return the post-unification hook of a token check, chaining to PREVIOUS."
-  (lambda (environment emit)
-    (flet ((continue-with (extended)
-             (if (and *phrase-probe* (%phrase-probe-tail-bound-p extended))
-                 (%phrase-probe-accept)
-                 (funcall emit extended))))
-      (if previous
-          (funcall previous environment #'continue-with)
-          (continue-with environment)))))
-
 (defun %phrase-probe-dispatch/k (goal explicit-module solver state succeed)
   "Prove GOAL, resolved by %RESOLVE-DISPATCH-TARGET, under a token check."
+  (when (%phrase-probe-tail-bound-p (proof-state-bindings state))
+    (%phrase-probe-accept))
   (cond
     ((or (null solver)
+         (member solver *phrase-probe-monotonic-solvers* :test #'eq)
          (member solver *phrase-probe-control-solvers* :test #'eq))
      (%prove-resolved-goal/k goal explicit-module solver state succeed))
-    ((member solver *phrase-probe-monotonic-solvers* :test #'eq)
-     (%prove-resolved-goal/k
-      goal explicit-module solver state
-      (lambda (next-state)
-        (if (logic-var-p (%walk-term-indexed (%phrase-probe-tail *phrase-probe*)
-                                             (proof-state-environment-index next-state)))
-            (funcall succeed next-state)
-            (%phrase-probe-accept)))))
     ((let ((index (proof-state-environment-index state)))
        (%occurs-p-indexed
         (%walk-term-indexed (%phrase-probe-tail *phrase-probe*) index)
@@ -105,7 +92,7 @@ unification."
      (%phrase-probe-accept))
     (t (%prove-resolved-goal/k goal explicit-module solver state succeed))))
 
-(defun %phrase-probe-verify (base-hook rulebase nonterminal prefix token max-depth)
+(defun %phrase-probe-verify (rulebase nonterminal prefix token max-depth)
   "True when the derivation of PREFIX ++ [TOKEN|R] binds or passes on R, or
 succeeds, before its search is exhausted."
   (let* ((tail (fresh-logic-variable "?PROBE-REST"))
@@ -114,7 +101,6 @@ succeeds, before its search is exhausted."
     (eq t (cl:catch tag
             (%with-prolog-top-level-call (rulebase)
               (let ((*unification-scratch* (%make-unification-scratch))
-                    (*constraint-post-unify-hook* (%make-phrase-probe-hook base-hook))
                     (*phrase-probe* (%make-phrase-probe tail tag))
                     (cut-tag (%make-cut-tag)))
                 (%with-logic-variable-order
@@ -166,10 +152,9 @@ promise that a phrase exists: the check accepts once the derivation reads
 past TOKEN, so guards on later tokens are not run.  MAX-DEPTH,
 MAX-INFERENCES and DEADLINE behave as the query options of the same names;
 a limit signals its condition."
-  (let ((base-hook *constraint-post-unify-hook*))
-    (%with-token-check-options (max-depth max-inferences max-inferences-p
-                                deadline deadline-p prefix)
-      (%phrase-probe-verify base-hook rulebase nonterminal prefix token max-depth))))
+  (%with-token-check-options (max-depth max-inferences max-inferences-p
+                              deadline deadline-p prefix)
+    (%phrase-probe-verify rulebase nonterminal prefix token max-depth)))
 
 (defun phrase-filter-candidates (rulebase nonterminal prefix candidates
                                  &key (max-depth *max-prolog-depth*)
@@ -182,10 +167,8 @@ PHRASE-TOKEN-VALID-P holds after PREFIX.
 The limits bound the checks of all candidates together."
   (unless (%proper-list-p candidates)
     (error 'type-error :datum candidates :expected-type 'list))
-  (let ((base-hook *constraint-post-unify-hook*))
-    (%with-token-check-options (max-depth max-inferences max-inferences-p
-                                deadline deadline-p prefix)
-      (remove-if-not (lambda (token)
-                       (%phrase-probe-verify base-hook rulebase nonterminal prefix
-                                             token max-depth))
-                     candidates))))
+  (%with-token-check-options (max-depth max-inferences max-inferences-p
+                              deadline deadline-p prefix)
+    (remove-if-not (lambda (token)
+                     (%phrase-probe-verify rulebase nonterminal prefix token max-depth))
+                   candidates)))

@@ -741,26 +741,31 @@ git_branch(dev)."))
   `(:name . "bob")` does.
 - A false result is a sound rejection: the token can be marked invalid.
 - A true result is not a promise that a phrase exists. The check runs the
-  grammar on `prefix ++ [token|R]` and accepts as soon as the derivation
-  reads past `token` into `R`, passes `R` to a builtin or foreign predicate
-  other than those that only bind it, or succeeds. Guards on later tokens are
+  grammar on `prefix ++ [token|R]` and accepts as soon as a goal starts
+  while `R` is bound, `R` reaches a builtin or foreign predicate other than
+  those listed below, or the derivation succeeds. Guards on later tokens are
   not run, so the result over-accepts: with `oa --> [a], [_], {fail}.` the
-  token `a` is accepted though no input is a phrase.
+  token `a` is accepted though no input is a phrase. Touching `R` inside a
+  negation or a solution collection (`\+`, `forall/2`, `findall/3`,
+  `bagof/3`, `setof/3`, `aggregate_all/3`) also accepts.
 - A term with variables is not a token. Checking a schema such as
   `file(_)` cannot reject its instances: with `pk(a) :- !. pk(b).` and
   `fl --> [file(X)], {pk(X), X == b}.`, the check of `file(_)` is false
   while `file(b)` is true.
 
-The check treats these builtins as only binding their arguments and runs
-them on `R`: `=`, `call/N`, conjunction, disjunction, `true`, `fail`,
+The check runs these builtins on `R` as usual, because they only bind their
+arguments: `=`, `call/N`, conjunction, disjunction, `true`, `fail`,
 `false`, `member/2`, `append/3`, `between/3`, `length/2`, `select/3`,
 `phrase/2,3` and the `def-dcg-rule` matchers `dcg-token-match`,
-`dcg-token-match-value`, `dcg-alt` and `dcg-opt`. They are recognized by
-their solver, so a foreign predicate with one of these names is not. `\+`,
-`once/1`, `->`, `*->`, if-then-else, `forall/2` and `ignore/1` run as usual,
-and the goals inside them are checked in turn. Each check uses its own
-table session, so tables built while checking are not reused by later
-queries.
+`dcg-token-match-value`, `dcg-alt` and `dcg-opt`. It also runs `once/1`,
+`ignore/1`, `->`, `*->`, if-then-else and `catch/3` as usual, because they
+pass their inner goal's bindings on, and the goals inside them are checked
+in turn. A negation or a solution collection drops its inner goal's
+bindings and decides its result without starting another goal, so a
+binding of `R` inside it would go unseen; the check accepts instead. All of
+these are recognized by their solver, so a foreign predicate with one of
+these names is not. Each check uses its own table session, so tables built
+while checking are not reused by later queries.
 
 The checks run under the limits of
 [Inference budget and deadline](#inference-budget-and-deadline), with the
@@ -778,7 +783,9 @@ deadline when the grammar comes from a source you do not control.
 - Keep grammars free of side effects (`assert`, I/O, global variables): the
   check stops a derivation at an arbitrary point.
 - Write lookahead as a stream predicate, `not_x(S, S) :- \+ S = [x|_].`
-  `\+ [x]` in a DCG body is not translated to a lookahead.
+  `\+ [x]` in a DCG body is not translated to a lookahead. A lookahead
+  written with negation cannot make the check reject a token: when the
+  negation reaches the tail after the token, the check accepts.
 
 ## Conditions
 
