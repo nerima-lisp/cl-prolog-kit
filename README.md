@@ -61,7 +61,7 @@ as a flake input:
 ```nix
 # flake.nix
 inputs.cl-prolog-kit = {
-  url = "github:nerima-lisp/cl-prolog-kit/v1.6.0";
+  url = "github:nerima-lisp/cl-prolog-kit/v1.7.0";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```

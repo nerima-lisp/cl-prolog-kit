@@ -76,6 +76,7 @@ Usable as goals inside a grammar body:
 | `def-dcg-rule`           | Compile a grammar body into a two-stream rule.             |
 | `phrase`                 | `(phrase rulebase rule-name input)` → `(values remainder matched-p)` for the first parse. |
 | `phrase-all`             | `(phrase-all rulebase rule-name input)` → the remainders of every parse. |
+| `phrase-next-terminals`  | The terminals that may follow a partial input, for completion. See [Next terminals](../reference/api.md#next-terminals-after-a-prefix). |
 | `dcg-alt` … `dcg-error-recovery` | Combinators usable as goals.                       |
 | `dcg-token-match`        | Match a token kind.                                        |
 | `dcg-token-match-value`  | Match a token kind and value.                              |

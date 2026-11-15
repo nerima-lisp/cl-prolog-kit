@@ -48,12 +48,23 @@
                            (%solve-dcg-star rule midpoint stream-out
                                             rulebase extended depth emit))))))
 
-(defun %dcg-match-token (expected-kind expected-value input rest environment emit)
+(declaim (ftype function %phrase-probe-open-input-p))
+
+(defun %dcg-match-token (expected-kind expected-value input rest environment emit
+                         &optional (probe-token expected-kind))
   "Match INPUT's first token against EXPECTED-KIND and EXPECTED-VALUE,
 unifying REST with the remaining tokens on success. A fresh, unbound
 EXPECTED-VALUE unifies with any token value, so this also implements a
-kind-only match."
+kind-only match.
+
+Under a PHRASE-NEXT-TERMINALS probe, an INPUT that is the probe's open tail
+is bound to PROBE-TOKEN followed by REST, so the probe sees the read."
   (let ((tokens (logic-substitute input environment)))
+    (when (and *phrase-probe*
+               (logic-var-p tokens)
+               (%phrase-probe-open-input-p tokens environment))
+      (return-from %dcg-match-token
+        (%constraint-unify-emit tokens (cons probe-token rest) environment emit)))
     (when (consp tokens)
       (multiple-value-bind (kind-env kind-ok)
           (unify expected-kind (%dcg-token-kind (first tokens)) environment)
@@ -68,7 +79,8 @@ kind-only match."
 
 (define-builtin (dcg-token-match-value expected-kind expected-value input rest)
                 (rulebase environment depth emit)
-  (%dcg-match-token expected-kind expected-value input rest environment emit))
+  (%dcg-match-token expected-kind expected-value input rest environment emit
+                    (cons expected-kind expected-value)))
 
 (define-builtin (dcg-error-recovery input rest) (rulebase environment depth emit)
   (let ((tokens (logic-substitute input environment))

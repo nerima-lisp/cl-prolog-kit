@@ -302,8 +302,13 @@ whichever of its own and the enclosing bounds comes first."
 
 (defmacro %with-inference-limits ((max-inferences deadline) &body body)
   "Run BODY as one top-level query; see %CALL-WITH-INFERENCE-LIMITS."
+  ;; A query nested in a probe (a foreign predicate calling QUERY-PROLOG, say)
+  ;; is not itself probed.
   `(%call-with-inference-limits ,max-inferences ,deadline
-                                (lambda () ,@body)))
+                                (lambda ()
+                                  (let ((*phrase-probe* nil)
+                                        (*phrase-probe-phase* nil))
+                                    ,@body))))
 
 (defun %call-with-cleanup-inference-allowance (function)
   "Call FUNCTION, a cleanup goal, with the cap raised by one allowance and
@@ -365,6 +370,13 @@ read the clock, so that a limit the query has reached stops it there."
 (defvar *constraints-active-p-hook* nil
   "Function reporting whether a dynamically scoped constraint store is active.")
 
+(defvar *phrase-probe* nil
+  "The PHRASE-NEXT-TERMINALS probe of the running top-level query, or NIL.
+See dcg-next-terminals.lisp.")
+(defvar *phrase-probe-phase* nil
+  "The probe phase of the current proof branch: set from the moment the
+branch reads the probe's open tail until the read is confirmed, or NIL.")
+
 (defvar *caller-cut-tag* nil
   "Cut barrier of the goal invocation currently dispatching a builtin solver.
 
@@ -374,7 +386,12 @@ caller's clause alternatives, as ISO requires.")
 
 (defun %make-cut-tag ()
   "Return a fresh CATCH tag identifying one cut barrier."
-  (list '%cut-barrier))
+  ;; A barrier made inside a probe phase records the phase, so the probe can
+  ;; tell a cut local to code run after the read from one that would prune
+  ;; alternatives chosen before it.
+  (if *phrase-probe-phase*
+      (list '%cut-barrier *phrase-probe-phase*)
+      (list '%cut-barrier)))
 
 (defstruct (proof-state
             (:constructor %make-proof-state

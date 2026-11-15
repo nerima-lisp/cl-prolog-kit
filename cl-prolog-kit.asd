@@ -18,7 +18,7 @@
   ;; Single source of truth for the version. flake.nix parses this exact form
   ;; (first match wins) and release.yml refuses to publish a tag that
   ;; disagrees with it, so a release edits this one line.
-  :version "1.6.0"
+  :version "1.7.0"
   :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
@@ -92,7 +92,8 @@
                (:file "source-loader")
                (:file "dsl-compiler")
                (:file "dsl")
-               (:file "dcg"))
+               (:file "dcg")
+               (:file "dcg-next-terminals"))
   :in-order-to ((asdf:test-op (asdf:test-op "cl-prolog-kit/test"))))
 
 (asdf:defsystem "cl-prolog-kit/weave"
@@ -100,7 +101,7 @@
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.6.0"
+  :version "1.7.0"
   :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
@@ -119,7 +120,7 @@
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.6.0"
+  :version "1.7.0"
   :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
@@ -180,6 +181,7 @@
                (:file "module-system-test")
                (:file "overlay-and-snapshot-test")
                (:file "dcg-test")
+               (:file "dcg-next-terminals-test")
                (:file "weave-public-test")
                (:file "weave-quality-test"))
   :perform (asdf:test-op (op c)
@@ -192,7 +194,7 @@
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.6.0"
+  :version "1.7.0"
   :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
@@ -214,7 +216,7 @@
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.6.0"
+  :version "1.7.0"
   :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
@@ -238,7 +240,7 @@
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.6.0"
+  :version "1.7.0"
   :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")

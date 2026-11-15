@@ -3,6 +3,8 @@
 ;;;; proof search.
 (in-package #:cl-prolog-kit)
 
+(declaim (ftype function %phrase-probe-end-phase %phrase-probe-table-key))
+
 (defun %replay-table-answers/k (goal state entry succeed)
   "Unify each currently eligible answer for ENTRY with GOAL and invoke SUCCEED."
   (let ((parent-bindings (proof-state-bindings state))
@@ -98,6 +100,7 @@
   (let ((*tabled-search-active-p* t))
     (let ((entry (%make-table-entry))
           (completed-p nil))
+      (setf (%table-entry-probe-phase entry) *phrase-probe-phase*)
       (setf (gethash key entries) entry)
       (unwind-protect (progn
           (loop with changed-p
@@ -117,10 +120,17 @@
               goal
               state
               (lambda (answer-state)
-                (multiple-value-bind (answer cyclic-answer-p contains-variables-p) (%canonicalize-variant goal (proof-state-environment-index answer-state))
-                  (when (%record-table-answer! entry answer cyclic-answer-p contains-variables-p)
-                    (setf changed-p t)
-                    (funcall succeed answer-state)))))
+                (let ((phase *phrase-probe-phase*))
+                  (if (and phase (not (eq phase (%table-entry-probe-phase entry))))
+                      ;; The answer extends a table begun before the probe
+                      ;; read its open tail; recording it would let each
+                      ;; iteration grow the tail by one more token.
+                      (%phrase-probe-end-phase
+                       phase (proof-state-environment-index answer-state))
+                      (multiple-value-bind (answer cyclic-answer-p contains-variables-p) (%canonicalize-variant goal (proof-state-environment-index answer-state))
+                        (when (%record-table-answer! entry answer cyclic-answer-p contains-variables-p)
+                          (setf changed-p t)
+                          (funcall succeed answer-state)))))))
                 while changed-p)
           (setf completed-p t))
         (setf (%table-entry-delta-active-p entry) nil
@@ -144,7 +154,10 @@
           (%left-recursive-p goal state)))) (%prove-raw-clauses/k goal state succeed)
     (let ((entries (%table-session-entries (proof-state-table-session state))))
       (multiple-value-bind (canonical-goal cyclic-goal-p) (%canonicalize-variant goal (proof-state-environment-index state))
-        (let* ((key (%table-key state canonical-goal cyclic-goal-p))
+        (let* ((key (if *phrase-probe*
+                        (%phrase-probe-table-key
+                         (%table-key state canonical-goal cyclic-goal-p) goal state)
+                        (%table-key state canonical-goal cyclic-goal-p)))
                (entry (gethash key entries)))
           (if entry (%replay-table-answers/k goal state entry succeed)
             (%prove-tabled/k goal state key entries succeed)))))))

@@ -681,6 +681,7 @@ indicator; see
 ## DCG
 
 - Grammar definition and execution: `def-dcg-rule`, `phrase`, `phrase-all`
+- Continuation queries: `phrase-next-terminals`, `map-phrase-next-terminals`
 - Combinators: `dcg-alt`, `dcg-opt`, `dcg-star`, `dcg-plus`,
   `dcg-error-recovery`
 - Token matchers: `dcg-token-match`, `dcg-token-match-value`
@@ -688,6 +689,101 @@ indicator; see
 DCG tokens are either a bare token-kind symbol or a `(kind . value)` cons.
 `dcg-token-match` matches the kind and returns the remaining input;
 `dcg-token-match-value` matches both kind and value. See [DCG](../guide/dcg.md).
+
+### Next terminals after a prefix
+
+`(phrase-next-terminals rulebase nonterminal prefix &key max-depth max-inferences deadline)`
+returns `(values terminals any-p end-p)` for a token list `prefix` that a user
+has typed so far:
+
+- `terminals`: the distinct terminals that may come next, in the order the
+  grammar's clauses produce them. A terminal that contains variables, such as
+  `f(_)`, is returned once however many clauses produce it, with fresh
+  variables.
+- `any-p`: true when some derivation accepts an arbitrary token next. This
+  happens for a terminal `[X]` when nothing binds `X`, including when a guard
+  on `X` fails or raises an instantiation error because the token is unknown.
+- `end-p`: true when `prefix` is itself a complete phrase. As with
+  `phrase/2`, the phrase must consume the whole input.
+
+All three empty means no input starting with `prefix` can be a phrase.
+`prefix` must be a proper list, otherwise `type-error` is signalled. Its
+tokens and the returned terminals are terms: build an atom from a typed word
+with `prolog-atom` and get a terminal's text back with `prolog-atom-text` (see
+[Atoms](#atoms)). `nonterminal` is a term such as `(read-prolog-term "git")` or
+`(read-prolog-term "opts([])")`. The grammar can be written with `-->` or
+`def-dcg-rule`.
+
+`(map-phrase-next-terminals function rulebase nonterminal prefix &key ...)`
+takes the same arguments, calls `function` with `(:terminal term)`,
+`(:any nil)` or `(:end nil)` as each distinct item is found, and returns
+`nil`.
+
+```lisp
+(defparameter *git*
+  (consult-prolog "
+git     --> [git], git_sub.
+git_sub --> [checkout], branch.
+git_sub --> [commit], commit_opts.
+commit_opts --> [].
+commit_opts --> ['-m'], message, commit_opts.
+commit_opts --> ['--amend'], commit_opts.
+message --> [_].
+branch  --> [B], { git_branch(B) }.
+git_branch(main).
+git_branch(dev)."))
+
+(phrase-next-terminals *git* (read-prolog-term "git")
+                       (read-prolog-term "[git, commit]"))
+;; terminals: the atoms '-m' and '--amend'; any-p NIL; end-p T
+(phrase-next-terminals *git* (read-prolog-term "git")
+                       (read-prolog-term "[git, checkout]"))
+;; terminals: the atoms main and dev; any-p NIL; end-p NIL
+```
+
+The grammar runs through the ordinary prover on `prefix` followed by an
+unbound tail, so it behaves as in `phrase/2`. When a derivation reads the next
+token `T` from the tail, it keeps running until it asks for the token after
+`T` or reaches the end of the phrase, and only then reports `T`. Guards placed
+after the terminal therefore still apply: a guard can reject `T`, and a guard
+that binds a variable terminal, such as `git_branch(B)` above, reports each
+value it binds.
+
+A derivation reports `T` early, without checking the rest of the clause, at
+the first of these. If `T` is still unbound, it sets `any-p`.
+
+- A cut that would prune alternatives chosen before `T` was read. The cut does
+  not run, so another next token can still take those alternatives.
+- An answer for a table begun before `T` was read. Tables include predicates
+  declared with `table/1` and those the engine tables on its own for left
+  recursion. That includes any `-->` nonterminal that calls itself right after
+  a terminal, such as `commit_opts` above, because the left-recursion analysis
+  does not count terminals as calls.
+- An instantiation error.
+
+The query runs under the limits of
+[Inference budget and deadline](#inference-budget-and-deadline), with the
+options above and the specials `*max-prolog-depth*`,
+`*max-prolog-inferences*` and `*prolog-deadline*`. Reaching a limit signals
+`prolog-inference-limit-exceeded` or `prolog-deadline-exceeded`, so
+`phrase-next-terminals` does not return. `map-phrase-next-terminals` has
+already called `function` for every item found before the limit, so a caller
+that needs partial results collects them there. Each call uses its own table
+session, so tables built for one call are not reused by later queries.
+
+Limitations:
+
+- The result can include terminals no complete input accepts. Guards after a
+  cut or a tabled nonterminal that ends the check are not run, and a terminal
+  read inside `\+` is reported. Put a guard that excludes an option, such as a
+  mutually exclusive flag, directly after the terminal and before any cut.
+- Builtins such as `append/3` or `length/2` that bind the input list are not
+  seen when they bind it. The binding is noticed at the next clause-head or
+  `=/2` unification, or at the end of the phrase. A builtin that enumerates
+  open lists can keep running until a limit stops it, and limits are off by
+  default.
+- `dcg-error-recovery` raises an instantiation error on the unread tail. Raised
+  before any token is read, it reaches the caller.
 
 ## Conditions
 

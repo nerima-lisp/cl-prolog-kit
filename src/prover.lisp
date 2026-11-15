@@ -7,7 +7,8 @@
 
 (in-package #:cl-prolog-kit)
 
-(declaim (ftype function %proper-list-p %prove-goal/k %prove-clauses/k %prove-rule/k))
+(declaim (ftype function %proper-list-p %prove-goal/k %prove-clauses/k %prove-rule/k
+                         %phrase-probe-end-phase))
 
 (defmacro %with-propagated-bindings
     ((propagated propagated-index extended extended-index) &body body)
@@ -140,8 +141,15 @@ Return (VALUES NORMALIZED-GOAL EXPLICIT-MODULE)."
 (progn
   (defun %prove-cut-goal/k (state succeed)
     "Succeed once, then prune this predicate invocation's alternatives."
-    (funcall succeed state)
-    (cl:throw (proof-state-cut-tag state) t))
+    (let ((phase *phrase-probe-phase*))
+      (if (and phase
+               (not (eq (second (proof-state-cut-tag state)) phase)))
+          ;; This cut would prune alternatives chosen before the probe read
+          ;; the open tail, which a different next token would still take.
+          (%phrase-probe-end-phase phase (proof-state-environment-index state))
+          (progn
+            (funcall succeed state)
+            (cl:throw (proof-state-cut-tag state) t)))))
 
   (defun %prove-static-goal/k
       (solver normalized-goal explicit-module state succeed)
