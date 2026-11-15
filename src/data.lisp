@@ -345,8 +345,10 @@ so a malformed clause signals and leaves RULEBASE untouched."
 
 The result equals inserting each clause with RULEBASE-INSERT-CLAUSE! at :LAST,
 or, for :FIRST, placing CLAUSES in their order before the existing clauses.
-All of CLAUSES share one new revision, so a running query sees none of them,
-and each affected predicate's descriptor is invalidated once.  An empty CLAUSES
+All of CLAUSES share one new revision: a predicate call that has already
+started enumerating its clauses sees none of them, and a call that starts
+later sees all of them.  Each affected predicate's descriptor is invalidated
+once.  An empty CLAUSES
 leaves RULEBASE and its revision unchanged."
   (check-type position (member :first :last))
   (when (null clauses)

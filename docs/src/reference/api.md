@@ -30,7 +30,10 @@ goals provide intentional mutation with logical-update semantics.
 `rulebase`. With `:last` the result is the same as calling
 `rulebase-insert-clause!` for each clause in order; with `:first` the clauses
 keep their order and precede the existing clauses. All of them share one new
-revision, so a query already running does not see any of them. Any insert
+revision. A predicate call that has already started enumerating its clauses
+does not see any of them; a call that starts later sees all of them, even
+inside a query that was already running (for example the next call of
+`p/1` after backtracking into `q(X)` in `q(X), p(X)`). Any insert
 or retract only marks the affected predicate's lookup index stale; the next
 lookup of that predicate rebuilds it once.
 An empty list leaves the rulebase and its revision unchanged. Every clause is

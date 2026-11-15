@@ -453,3 +453,23 @@
               (query-prolog base '(bulk alpha ?n)))
     (is-equal (1+ (cl-prolog-kit::rulebase-revision base))
               (cl-prolog-kit::rulebase-revision extended))))
+
+(deftest bulk-insert-is-seen-by-predicate-calls-that-start-later ()
+  ;; Only a call that has already started enumerating keeps its snapshot; the
+  ;; next call of P/1, started after backtracking into Q/1, sees the batch.
+  (let ((rulebase (make-rulebase
+                   :clauses (list (make-clause '(visibility-q 1))
+                                  (make-clause '(visibility-q 2))
+                                  (make-clause '(visibility-p 1)))))
+        (seen '()))
+    (map-prolog-solutions
+     (lambda (solution)
+       (push (cdr (assoc '?x solution)) seen)
+       (when (= 1 (length seen))
+         (rulebase-insert-clauses!
+          rulebase (list (make-clause '(visibility-p 2))
+                         (make-clause '(visibility-p 1))))))
+     rulebase '((visibility-q ?x) (visibility-p ?x)))
+    ;; The P(1) call that produced the first solution had started before the
+    ;; insert, so it does not yield the inserted duplicate P(1); P(2) is new.
+    (is-equal '(1 2) (reverse seen))))
