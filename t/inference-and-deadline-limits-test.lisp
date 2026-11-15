@@ -323,6 +323,16 @@ nest(N) :- N1 is N - 1, setup_call_cleanup(true, nest(N1), (assertz(ran), lp))."
   ;; dropped and the host receives the inference stop that started the
   ;; unwind.  Neither depends on how many calls the cleanup reached.  A
   ;; root without a deadline bounds its cleanups by the allowance alone.
+  ;; Run the same shape once first, under a far deadline and without the
+  ;; counting predicate, so that first-use costs (lazy descriptors, the first
+  ;; large allocation, GC growth) fall before the 100 ms window is measured.
+  (limits-test-condition (prolog-inference-limit-exceeded)
+    (query-prolog (make-rulebase)
+                  '(setup_call_cleanup
+                    true (and (repeat) (fail))
+                    (and (cl-prolog-kit::numlist 1 100000 ?l) (fail)))
+                  :max-inferences 1000
+                  :deadline (prolog-deadline-after 60)))
   (let* ((*limits-test-late-calls* 0)
          (deadline (prolog-deadline-after 1/10))
          (condition (limits-test-condition (prolog-inference-limit-exceeded)
