@@ -430,3 +430,124 @@ on a terminal user_input can block reading it."
    200)
   ;; X * X = 2 fails for every value, so indomain/1 finds no solution.
   ('(and (in ?x (1 |..| 300)) (|#=| (* ?x ?x) 2) (indomain ?x)) 200))
+
+;;; A limit stop raised by a nested query unwinds through the enclosing
+;;; query's cleanups, which must still run on the shared allowance.
+
+(define-foreign-predicate (limits-test-inner-repeat budget)
+    (rulebase environment depth emit)
+  (declare (cl:ignore depth))
+  (query-prolog rulebase '(and (repeat) (fail)) :max-inferences budget)
+  (funcall emit environment))
+
+(define-foreign-predicate (limits-test-inner-loop-until-deadline)
+    (rulebase environment depth emit)
+  (declare (cl:ignore depth))
+  ;; Own budget, so the query does not share the enclosing limits; it
+  ;; inherits the enclosing deadline and stops there.
+  (query-prolog rulebase '(and (repeat) (fail)) :max-inferences 1000000000)
+  (funcall emit environment))
+
+(deftest outer-cleanup-runs-after-a-nested-inference-stop ()
+  (let ((rulebase (make-rulebase)))
+    (is (limits-test-condition (prolog-inference-limit-exceeded)
+          (query-prolog rulebase
+                        '(setup_call_cleanup true (limits-test-inner-repeat 1)
+                          (assertz (ran)))
+                        :max-inferences 4
+                        :deadline (prolog-deadline-after 1/2))))
+    (is-equal '(nil) (query-prolog rulebase '(ran)))))
+
+(deftest outer-cleanup-runs-after-a-nested-deadline-stop ()
+  (let ((rulebase (make-rulebase)))
+    (is (limits-test-condition (prolog-deadline-exceeded)
+          (query-prolog rulebase
+                        '(setup_call_cleanup true
+                          (limits-test-inner-loop-until-deadline)
+                          (assertz (ran)))
+                        :max-inferences 4
+                        :deadline (prolog-deadline-after 1/10))))
+    (is-equal '(nil) (query-prolog rulebase '(ran)))))
+
+(defun limits-test-tick-rules ()
+  (prolog
+    ((tick-loop) (cl-prolog-kit::between 1 1000000 ?_) (assertz (tick)) (fail))
+    ((tick-loop))))
+
+(defun limits-test-count (rulebase predicate)
+  (length (query-prolog rulebase `(catch (,predicate) ?_ fail))))
+
+(define-foreign-predicate (limits-test-nested-cleanups depth)
+    (rulebase environment unused-depth emit)
+  (declare (cl:ignore unused-depth))
+  ;; DEPTH nested queries, each with its own budget and a looping cleanup;
+  ;; the innermost one stops on its limit.
+  (if (zerop depth)
+      (query-prolog rulebase '(and (repeat) (fail)) :max-inferences 1)
+      (query-prolog rulebase
+                    `(setup_call_cleanup
+                      true (limits-test-nested-cleanups ,(1- depth))
+                      (tick-loop))
+                    :max-inferences 100))
+  (funcall emit environment))
+
+(deftest cleanup-allowance-does-not-grow-with-nesting-depth ()
+  (flet ((ticks (depth)
+           (let ((rulebase (limits-test-tick-rules)))
+             (is (limits-test-condition (prolog-inference-limit-exceeded)
+                   (query-prolog rulebase
+                                 `(setup_call_cleanup
+                                   true (limits-test-nested-cleanups ,depth)
+                                   (tick-loop))
+                                 :max-inferences 1000
+                                 :deadline (prolog-deadline-after 1))))
+             (limits-test-count rulebase 'tick))))
+    (let ((flat (ticks 0)))
+      (is (plusp flat))
+      ;; Seven cleanups share the allowance one cleanup had to itself.
+      (is-equal flat (ticks 6)))))
+
+(define-foreign-predicate (limits-test-spend count budget)
+    (rulebase environment depth emit)
+  (declare (cl:ignore depth))
+  (query-prolog rulebase `(and (cl-prolog-kit::between 1 ,count ?x) (fail))
+                :max-inferences budget)
+  (funcall emit environment))
+
+(defun limits-test-cleanup-spending (count budget)
+  "Stop a query through a nested limit, then run a cleanup that starts a
+query with its own BUDGET costing about 2 * COUNT inferences before it
+asserts ran/0.  Return the condition the query raised and whether ran/0
+was asserted."
+  (let* ((rulebase (make-rulebase))
+         (condition
+           (limits-test-condition (prolog-inference-limit-exceeded)
+             (query-prolog rulebase
+                           `(setup_call_cleanup
+                             true (limits-test-inner-repeat 1)
+                             (and (limits-test-spend ,count ,budget)
+                                  (assertz (ran))))
+                           :max-inferences 4
+                           :deadline (prolog-deadline-after 1)))))
+    (values condition (plusp (limits-test-count rulebase 'ran)))))
+
+(deftest query-inside-a-cleanup-is-charged-to-the-allowance ()
+  ;; 496 rounds of between/fail fit in the 1000-inference allowance with
+  ;; room for assertz/1; the stop that propagates is the inner query's.
+  (multiple-value-bind (condition ran-p)
+      (limits-test-cleanup-spending 496 1000000000)
+    (is ran-p)
+    (is-equal 1 (prolog-inference-limit-exceeded-limit condition)))
+  ;; 499 rounds need more than the allowance has left: the nested query is
+  ;; capped at that remainder instead of its own budget, and nothing is
+  ;; left for assertz/1.
+  (multiple-value-bind (condition ran-p)
+      (limits-test-cleanup-spending 499 1000000000)
+    (is (not ran-p))
+    (is (< (prolog-inference-limit-exceeded-limit condition)
+           cl-prolog-kit::*inference-limit-cleanup-allowance*)))
+  ;; A smaller budget of its own still applies.
+  (multiple-value-bind (condition ran-p)
+      (limits-test-cleanup-spending 100 10)
+    (is (not ran-p))
+    (is-equal 10 (prolog-inference-limit-exceeded-limit condition))))

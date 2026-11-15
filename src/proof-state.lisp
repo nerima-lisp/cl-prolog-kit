@@ -46,25 +46,54 @@ pause between the trip and the cleanup does not cancel a cheap cleanup.")
   "Goal dispatches left before the active inference limits are consulted.")
 
 (defstruct (%inference-limits
-            (:constructor %make-inference-limits (limit reserve deadline))
+            (:constructor %make-inference-limits
+                (limit reserve deadline enclosing
+                 &aux (cleanup-p (and enclosing
+                                      (%inference-limits-cleanup-p
+                                       enclosing)))))
             (:constructor %make-inference-cleanup-pool
-                (limit deadline &aux (reserve limit) (cleanup-pool-p t))))
+                (limit deadline enclosing
+                 &aux (reserve limit) (cleanup-pool-p t) (cleanup-p t))))
   "Limits of one top-level query, shared by the queries nested inside it."
   (limit nil :type (or null (integer 0)) :read-only t)
   (reserve nil :type (or null (integer 0)))
   (deadline nil :type (or null integer) :read-only t)
   (tripped-p nil)
+  ;; Only the root of a chain of nested limits holds the cleanup pool, so
+  ;; the pool does not grow with nesting depth.
   (cleanup-pool nil :type (or null %inference-limits))
-  (cleanup-pool-p nil :read-only t))
+  (cleanup-pool-p nil :read-only t)
+  ;; The limits this query was started under: another query's limits or
+  ;; the cleanup pool it runs in.  A cleanup pool points at the root that
+  ;; owns it.  NIL for the root.
+  (enclosing nil :type (or null %inference-limits) :read-only t)
+  ;; True for the cleanup pool and for queries started inside a cleanup that
+  ;; runs on it: they poll their deadline at every inference.
+  (cleanup-p nil :read-only t))
+
+(defun %inference-limits-root (limits)
+  "Return the outermost limits of the chain LIMITS belongs to."
+  (loop for enclosing = (%inference-limits-enclosing limits)
+        while enclosing
+        do (setf limits enclosing))
+  limits)
 
 (defvar *inference-limits* nil
   "The %INFERENCE-LIMITS of the running query, or NIL when it has none.")
 
 (defun %trip-inference-limit (limits condition-type resource message initargs)
-  "Mark LIMITS exceeded and raise CONDITION-TYPE.  The countdown stays
-negative, so a caller that swallows the condition trips it again at the next
-dispatch."
-  (setf (%inference-limits-tripped-p limits) t)
+  "Mark LIMITS and every limits enclosing it exceeded, then raise
+CONDITION-TYPE.  The condition unwinds through the enclosing queries too, so
+their cleanups need the cleanup pool as much as this query's do.  The
+countdown stays negative, so a caller that swallows the condition trips it
+again at the next dispatch."
+  ;; If host code between two queries handles the condition and lets the
+  ;; enclosing query go on, that query's later cleanups use the pool too;
+  ;; the pool is still minted once per chain, so this cannot add inferences
+  ;; beyond one allowance.
+  (loop for current = limits then (%inference-limits-enclosing current)
+        while current
+        do (setf (%inference-limits-tripped-p current) t))
   (%raise-resource-error resource nil (%iso-atom "CALL") message
                          :condition-type condition-type
                          :initargs initargs))
@@ -93,7 +122,7 @@ exhausted.  Called only when *INFERENCE-COUNTDOWN* went negative."
           (%check-inference-deadline limits)
           (let ((chunk (%inference-chunk
                         reserve deadline
-                        (%inference-limits-cleanup-pool-p limits))))
+                        (%inference-limits-cleanup-p limits))))
             (when reserve
               (setf (%inference-limits-reserve limits) (- reserve chunk)))
             ;; This dispatch consumes the first inference of CHUNK.
@@ -135,7 +164,9 @@ caller passed none.  A query nested inside a running query that has limits
 the enclosing query's remaining budget and deadline.  Otherwise the query gets
 its own limits: the explicit values, or *MAX-PROLOG-INFERENCES* and
 *PROLOG-DEADLINE* for :DEFAULT, except that its deadline is never later
-than the enclosing query's."
+than the enclosing query's.  Inside a cleanup running on the cleanup pool,
+its budget is also capped by what the pool has left, and the inferences it
+uses are charged to the pool; see %CALL-CHARGED-TO-CLEANUP-POOL."
   (let ((enclosing *inference-limits*))
     (if (and enclosing
              (member max-inferences '(nil :default))
@@ -158,17 +189,52 @@ than the enclosing query's."
                   (if deadline
                       (min deadline (%inference-limits-deadline enclosing))
                       (%inference-limits-deadline enclosing))))
-          (if (and (null limit) (null deadline))
-              (let ((*inference-limits* nil)
-                    (*inference-countdown* most-positive-fixnum))
-                (funcall function))
-              (let* ((countdown (%inference-chunk limit deadline))
-                     (limits (%make-inference-limits
-                              limit (and limit (- limit countdown)) deadline))
-                     (*inference-limits* limits)
-                     (*inference-countdown* countdown))
-                (%check-inference-deadline limits)
-                (funcall function)))))))
+          (cond
+            ((and enclosing (%inference-limits-cleanup-pool-p enclosing))
+             (%call-charged-to-cleanup-pool enclosing limit deadline function))
+            ((and (null limit) (null deadline))
+             (let ((*inference-limits* nil)
+                   (*inference-countdown* most-positive-fixnum))
+               (funcall function)))
+            (t
+             (%call-with-fresh-inference-limits
+              limit deadline enclosing function)))))))
+
+(defun %call-with-fresh-inference-limits (limit deadline enclosing function)
+  "Call FUNCTION under new limits LIMIT and DEADLINE started inside
+ENCLOSING (or NIL)."
+  (let* ((countdown (%inference-chunk limit deadline))
+         (limits (%make-inference-limits
+                  limit (and limit (- limit countdown)) deadline enclosing))
+         (*inference-limits* limits)
+         (*inference-countdown* countdown))
+    (%check-inference-deadline limits)
+    (funcall function)))
+
+(defun %call-charged-to-cleanup-pool (pool limit deadline function)
+  "Call FUNCTION, a nested query with its own LIMIT started by a cleanup
+running on POOL.  The query may use at most what POOL has left (less when
+LIMIT is lower), and whatever it uses is taken from POOL, so a cleanup cannot
+escape the pool by starting a query with a larger budget."
+  (let* ((available (+ (%inference-limits-reserve pool)
+                       (max 0 *inference-countdown*)))
+         (granted (if limit (min limit available) available)))
+    ;; Hand the pool's whole remainder to the nested query and take back
+    ;; what it leaves unused.
+    (setf (%inference-limits-reserve pool) (- available granted)
+          *inference-countdown* 0)
+    (let* ((countdown (%inference-chunk granted deadline t))
+           (limits (%make-inference-limits
+                    granted (- granted countdown) deadline pool))
+           (*inference-limits* limits)
+           (*inference-countdown* countdown))
+      (unwind-protect
+           (progn
+             (%check-inference-deadline limits)
+             (funcall function))
+        (incf (%inference-limits-reserve pool)
+              (+ (%inference-limits-reserve limits)
+                 (max 0 *inference-countdown*)))))))
 
 (defmacro %with-inference-limits ((max-inferences deadline) &body body)
   "Run BODY as one top-level query; see %CALL-WITH-INFERENCE-LIMITS."
@@ -176,22 +242,25 @@ than the enclosing query's."
                                 (lambda () ,@body)))
 
 (defun %inference-cleanup-pool (limits)
-  "Return LIMITS' cleanup pool, minting it on first use."
-  (or (%inference-limits-cleanup-pool limits)
-      (let* ((now (get-internal-real-time))
-             (deadline (%inference-limits-deadline limits))
-             (allowance *inference-limit-cleanup-allowance*))
-        (setf (%inference-limits-cleanup-pool limits)
-              (%make-inference-cleanup-pool
-               allowance
-               (+ (if deadline (min deadline now) now)
-                  *inference-limit-cleanup-grace*))))))
+  "Return the cleanup pool of the chain LIMITS belongs to, minting it on
+first use.  Its deadline counts from LIMITS, the limits that stopped."
+  (let ((root (%inference-limits-root limits)))
+    (or (%inference-limits-cleanup-pool root)
+        (let* ((now (get-internal-real-time))
+               (deadline (%inference-limits-deadline limits))
+               (allowance *inference-limit-cleanup-allowance*))
+          (setf (%inference-limits-cleanup-pool root)
+                (%make-inference-cleanup-pool
+                 allowance
+                 (+ (if deadline (min deadline now) now)
+                    *inference-limit-cleanup-grace*)
+                 root))))))
 
 (defun %call-with-cleanup-inference-allowance (function)
-  "Call FUNCTION, a cleanup goal.  After the running query tripped a limit,
-the cleanup draws on that query's single cleanup pool; a cleanup already
-running on the pool keeps drawing on it.  Inferences it leaves unused return
-to the pool."
+  "Call FUNCTION, a cleanup goal.  After the running query, or a query
+nested inside it, tripped a limit, the cleanup draws on the single cleanup
+pool of the outermost limits; a cleanup already running on the pool keeps
+drawing on it.  Inferences it leaves unused return to the pool."
   (let ((limits *inference-limits*))
     (if (or (null limits)
             (%inference-limits-cleanup-pool-p limits)

@@ -335,10 +335,17 @@ goal, so once a query has stopped, its cleanups run on a separate allowance of
 1000 inferences. The allowance is shared: every cleanup of that query,
 including cleanups nested inside other cleanups, draws on the same 1000, so a
 cleanup cannot obtain a new allowance by starting another
-`setup_call_cleanup/3`. The allowance also has a deadline 500 ms after the
-query stopped (after the query's deadline, when the deadline is what stopped
-it), checked at every inference. A cleanup that exhausts the allowance raises
-the same two conditions.
+`setup_call_cleanup/3`. When a nested query started by a foreign predicate
+stops on its own limit, the stop unwinds through the enclosing queries as
+well, so their cleanups also run on the allowance; there is one allowance for
+the outermost query and every query nested inside it, however deep. A query
+that a cleanup starts while running on the allowance is charged to it: it
+may use at most what the allowance has left, its own `:max-inferences` can
+only lower that, and the inferences it uses are taken from the allowance.
+The allowance also has a deadline 500 ms after the query stopped (after the
+query's deadline, when the deadline is what stopped it), checked at every
+inference. A cleanup that exhausts the allowance raises the same two
+conditions.
 
 ## Capability Policy
 
