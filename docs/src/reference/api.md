@@ -82,6 +82,31 @@ such as `read/1`, `read_term/2`, `term_to_atom/2`, and
 `read_term_from_atom/3`. Parse text in one thread at a time, even when each
 thread has its own rulebase.
 
+## Ownership of Returned Terms
+
+Terms the library returns may share structure with the clauses a rulebase
+stores. This covers the clauses from `rulebase-visible-clauses`, the bindings
+in solutions from `map-prolog-solutions`, `query-prolog`, `query-prolog-first`,
+and `solution-binding`, and raw environments returned with `:project nil`.
+Strings in those terms are the rulebase's own strings, and other parts may be
+shared too. A caller must treat every returned term as read-only and must not
+destructively modify it (`setf` of `char`, `car`, `cdr`, `aref`, or `nconc`
+and similar), the same convention as for the string `symbol-name` returns.
+To change a returned term, copy it first (for example with `copy-seq` or
+`copy-tree`).
+
+The library does not copy terms on the way out, because a query on a
+per-keystroke path would then allocate on every call. Modifying a returned
+term changes the stored clause, and with it the result of later queries, and
+the first-argument string index keys on string contents, so a modified string
+also leaves the index inconsistent. `rulebase-snapshot` shares terms with its
+origin, so the same rule covers both rulebases.
+
+Terms passed in are not affected by this rule. `make-rulebase`,
+`rulebase-insert-clause!`, `rulebase-insert-clauses!`, and the overlay
+functions store their own copy of each clause, strings included, so a caller
+may modify its own terms after inserting them.
+
 ## Atoms
 
 - `prolog-atom` — `(prolog-atom text)` returns the atom whose printed text is

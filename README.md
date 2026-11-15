@@ -40,6 +40,12 @@ the owning thread and pass the snapshot to the other thread. See
 [Threads](https://nerima-lisp.github.io/cl-prolog-kit/reference/api/#threads)
 in the API reference.
 
+Terms the library returns (solution bindings, `rulebase-visible-clauses`) may
+share structure, strings included, with the clauses the rulebase stores.
+Treat them as read-only, as you would the string `symbol-name` returns, and
+copy a term before modifying it. See
+[Ownership of Returned Terms](https://nerima-lisp.github.io/cl-prolog-kit/reference/api/#ownership-of-returned-terms).
+
 ## Install
 
 cl-prolog-kit is not on Quicklisp. Clone it and load its ASDF definition, or put

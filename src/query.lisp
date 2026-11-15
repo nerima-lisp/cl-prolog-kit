@@ -139,7 +139,10 @@ top-level query under the decoded inference and deadline limits."
 Solutions stream to FUNCTION as they are proven.  With PROJECT (the
 default) FUNCTION receives an alist of query-variable bindings; otherwise
 it receives the raw environment.  LIMIT, when non-NIL, stops the search
-after that many solutions.  Returns NIL."
+after that many solutions.  Returns NIL.
+
+Solution terms may share structure, strings included, with RULEBASE's
+stored clauses: treat them as read-only and copy before modifying."
   (%with-query-options (options max-depth environment project limit)
     (%map-prolog-solutions* function rulebase query
                             max-depth environment project limit)))
@@ -148,7 +151,10 @@ after that many solutions.  Returns NIL."
   "Return the list of solutions for QUERY against RULEBASE.
 
 Each solution is an alist of query-variable bindings (or a raw environment
-when PROJECT is NIL).  LIMIT bounds the number of solutions returned."
+when PROJECT is NIL).  LIMIT bounds the number of solutions returned.
+
+Solution terms may share structure, strings included, with RULEBASE's
+stored clauses: treat them as read-only and copy before modifying."
   (%with-query-options (options max-depth environment project limit)
     (let ((solutions '()))
       (%map-prolog-solutions* (lambda (solution) (push solution solutions))
@@ -161,7 +167,10 @@ when PROJECT is NIL).  LIMIT bounds the number of solutions returned."
 
 The primary value remains NIL when a ground query succeeds, preserving the
 solution representation and existing callers.  The secondary value
-distinguishes that case from failure."
+distinguishes that case from failure.
+
+Solution terms may share structure, strings included, with RULEBASE's
+stored clauses: treat them as read-only and copy before modifying."
   (%with-query-options (options max-depth environment project limit)
     (declare (cl:ignore limit))
     (block first-solution
@@ -189,5 +198,6 @@ MAX-INFERENCES and DEADLINE behave as the query options of the same names."
       (%provable-p query rulebase '() max-depth))))
 
 (defun solution-binding (variable solution)
-  "Return VARIABLE's value from a solution alist."
+  "Return VARIABLE's value from a solution alist.
+The value may share structure with stored clauses; treat it as read-only."
   (cdr (assoc variable solution)))

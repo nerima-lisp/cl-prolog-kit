@@ -248,7 +248,11 @@ source registrations, flags, and character conversions are copied as well."
                     collect entry))))
 
 (defun rulebase-visible-clauses (rulebase)
-  "Return detached clauses visible at one current logical-update snapshot."
+  "Return clauses visible at one current logical-update snapshot.
+
+The cons structure of each clause is a fresh copy, but strings and other
+atoms are shared with the stored clauses, and the first-argument string index
+keys on string contents: treat the result as read-only."
   (multiple-value-bind (revision entries) (%rulebase-snapshot rulebase)
     (declare (cl:ignore revision))
     (mapcar (lambda (entry)
@@ -434,7 +438,8 @@ rulebase never affect the other.  The underlying Lisp streams of the I/O
 context are shared.
 
 A rulebase may be used by one thread at a time; hand another thread a
-snapshot rather than the rulebase itself."
+snapshot rather than the rulebase itself.  Terms are shared with RULEBASE, so
+a destructive change to a term returned from either one changes both."
   (check-type rulebase rulebase)
   (%copy-rulebase rulebase))
 
