@@ -49,9 +49,9 @@ Return the PROLOG-STACK-LIMIT-EXCEEDED it raised, or :FINISHED."
     (dotimes (index depth term)
       (setf term (list 'f term)))))
 
-(defun stack-test-goal (goal)
-  "Like STACK-TEST-QUERY for a goal given as a term."
-  (let ((cl-prolog-kit::*control-stack-limit-fraction* +stack-test-fraction+))
+(defun stack-test-goal (goal &key (fraction +stack-test-fraction+))
+  "Like STACK-TEST-QUERY for a goal given as a term, under FRACTION."
+  (let ((cl-prolog-kit::*control-stack-limit-fraction* fraction))
     (handler-case
         (progn (query-prolog (stack-test-rules) goal
                              :max-inferences 10000000
@@ -60,23 +60,28 @@ Return the PROLOG-STACK-LIMIT-EXCEEDED it raised, or :FINISHED."
       (prolog-stack-limit-exceeded (condition) condition))))
 
 (deftest deep-terms-inside-one-builtin-raise-the-stack-limit ()
-  ;; Each of these walks a term 5000 levels deep inside a single builtin
-  ;; call, with no goal dispatch to check the stack: the occurs check of
-  ;; foldl/4's growing accumulator, and the copy and comparison msort/2
-  ;; makes of two deep terms.  Each runs twice: the guard page was not
-  ;; touched the first time.
-  (let ((deep-pair (list (stack-test-deep-term 5000 'b)
-                         (stack-test-deep-term 5000 'a))))
-    (dotimes (round 2)
-      (is (stack-test-stopped-p "numlist(1, 5000, L), foldl(wrap, L, a, _)."))
-      (is (typep (stack-test-goal (list 'cl-prolog-kit::msort deep-pair '?sorted))
-                 'prolog-stack-limit-exceeded))))
-  ;; A long list is walked down its tail.  Whether that recursion or a loop,
-  ;; sorting it either finishes or stops with the limit; it does not end
-  ;; the process.
-  (let ((result (stack-test-query "numlist(1, 20000, L), msort(L, _).")))
-    (is (or (eq result :finished)
-            (typep result 'prolog-stack-limit-exceeded)))))
+  ;; Unifying two terms 5000 levels deep and copying one walk them inside a
+  ;; single builtin call, with no goal dispatch to check the stack, so only
+  ;; the check in the term walk stops them.  foldl/4 grows a deep
+  ;; accumulator and checks it for occurrences at every step; that costs
+  ;; time quadratic in the depth reached, so it runs under a sixteenth of
+  ;; the stack, where the dispatch check may be the one that stops it.  Each
+  ;; runs twice: the guard page was not touched the first time.  Comparing
+  ;; deep terms is not used: term comparison does not dereference through
+  ;; the check and takes time quadratic in the depth.
+  (dotimes (round 2)
+    (is (typep (stack-test-goal (list '= (stack-test-deep-term 5000 'a)
+                                      (stack-test-deep-term 5000 'a)))
+               'prolog-stack-limit-exceeded))
+    (is (typep (stack-test-goal (list 'cl-prolog-kit::copy_term
+                                      (stack-test-deep-term 5000 '?leaf) '?copy))
+               'prolog-stack-limit-exceeded))
+    (is (typep (stack-test-goal (read-prolog-term
+                                 "numlist(1, 5000, L), foldl(wrap, L, a, _).")
+                                :fraction 1/16)
+               'prolog-stack-limit-exceeded)))
+  ;; A long list is walked down its tail by loops, so sorting one finishes.
+  (is-equal :finished (stack-test-query "numlist(1, 20000, L), msort(L, _).")))
 
 (deftest stack-limit-is-a-catchable-resource-error ()
   (let ((condition (stack-test-query "cnt(0, 3000).")))
