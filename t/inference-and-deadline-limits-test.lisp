@@ -299,3 +299,24 @@ heavy."
         (limits-test-query (limits-test-cleanup-rules)
                            "setup_call_cleanup(true, lp, heavy)."
                       :max-inferences 1000))))
+
+(define-foreign-predicate (limits-test-nested-loop budget)
+    (rulebase environment depth emit)
+  (declare (cl:ignore depth))
+  (query-prolog rulebase '(and (repeat) (fail)) :max-inferences budget)
+  (funcall emit environment))
+
+(deftest nested-query-with-own-budget-keeps-the-enclosing-deadline ()
+  (let ((*prolog-deadline* nil))
+    (is (limits-test-condition (prolog-deadline-exceeded)
+          (query-prolog (make-rulebase) '(limits-test-nested-loop 100000000)
+                        :deadline (prolog-deadline-after 1/5))))))
+
+(deftest bound-specials-stop-a-looping-initialization-goal ()
+  ;; consult-prolog takes no limit options; its initialization goals run
+  ;; under the specials.
+  (let ((*max-prolog-inferences* 1000)
+        (*prolog-deadline* (prolog-deadline-after 1)))
+    (is (limits-test-condition (prolog-inference-limit-exceeded)
+          (consult-prolog ":- initialization((repeat, fail))."
+                          (make-rulebase))))))

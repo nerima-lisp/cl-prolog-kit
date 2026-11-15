@@ -32,7 +32,7 @@ The reader returns the offending value or goal for diagnostics. See
 
 | Condition                         | Reader                                  | Signalled when |
 | --------------------------------- | --------------------------------------- | -------------- |
-| `prolog-inference-limit-exceeded` | `prolog-inference-limit-exceeded-limit` | A query dispatches more goals than `:max-inferences` (or `*max-prolog-inferences*`) allows. |
+| `prolog-inference-limit-exceeded` | `prolog-inference-limit-exceeded-limit` | A query dispatches more goals, or its builtins produce more solutions, than `:max-inferences` (or `*max-prolog-inferences*`) allows. |
 | `prolog-deadline-exceeded`        | `prolog-deadline-exceeded-deadline`     | A query is running when its `:deadline` (or `*prolog-deadline*`) has passed. |
 
 The readers return the budget and the deadline that were exceeded. Both are
@@ -40,7 +40,9 @@ subclasses of `prolog-resource-error` and carry an ISO
 `resource_error(inferences)` or `resource_error(deadline)` term, but Prolog
 `catch/3` does not intercept them: like `halt`, they always reach the Lisp
 caller. Cleanup goals of `setup_call_cleanup/3` and `call_cleanup/2` still run
-while the stack unwinds. Invalid limit values signal a plain `type-error`. See
+while the stack unwinds, on a small shared allowance; a cleanup that exhausts
+it raises the same conditions, and then the reader of
+`prolog-inference-limit-exceeded` returns the allowance (1000). Invalid limit values signal a plain `type-error`. See
 [Runtime Resource Limits](api.md#inference-budget-and-deadline) for how the
 limits are counted and how nested queries share them.
 
@@ -139,9 +141,11 @@ A host that runs untrusted rules can bound every query the same way:
 ```lisp
 (handler-case
     (query-prolog *rb* '(main) :max-inferences 1000000
-                               :deadline (prolog-deadline-after 5))
+                               :deadline (prolog-deadline-after 5)
+                               :max-depth 1000)
   (prolog-inference-limit-exceeded () :too-many-inferences)
-  (prolog-deadline-exceeded () :timed-out))
+  (prolog-deadline-exceeded () :timed-out)
+  (prolog-depth-limit-exceeded () :too-deep))
 ```
 
 For failures *inside* Prolog, prefer Prolog-level `catch/3` and `throw/1` — see

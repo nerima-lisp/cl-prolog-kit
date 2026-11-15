@@ -214,9 +214,13 @@ by default.
 
 - `*max-prolog-inferences*`: the default inference budget of a top-level
   query, `nil` (unbounded) or a non-negative integer. One inference is one goal
-  dispatch, including user-rule calls made on the compiled rule-program path,
+  dispatch or one solution produced by a builtin or foreign predicate.
+  Dispatches include user-rule calls made on the compiled rule-program path,
   builtin calls, and goals run inside `findall/3`, `setof/3`, `call/N`, `\+`
-  and other meta-calls of the same query. A query that needs more raises
+  and other meta-calls of the same query. Counting solutions is what stops
+  `repeat/0`, `between/3` and `length/2` from enumerating without bound
+  inside `findall/3` or `aggregate_all/3`. A deterministic builtin such as
+  `true/0` therefore costs two inferences. A query that needs more raises
   `prolog-inference-limit-exceeded`.
 - `*prolog-deadline*`: the default deadline, `nil` or an absolute
   `get-internal-real-time` value. A query still running at the deadline raises
@@ -234,23 +238,50 @@ wrong type, in an option or in a special, signals `type-error`.
 ```lisp
 (query-prolog *rb* '(ancestor tom ?who)
               :max-inferences 100000
-              :deadline (prolog-deadline-after 2))
+              :deadline (prolog-deadline-after 2)
+              :max-depth 1000)
+```
+
+`:max-inferences` does not bound recursion depth. Each nested rule call adds
+Lisp stack frames, and roughly 3000 levels of recursion exhaust SBCL's
+default control stack, which a budget of a few thousand inferences already
+allows. A host running untrusted rules must therefore also pass `:max-depth`
+(or bind `*max-prolog-depth*`), as above.
+
+`consult-prolog` takes no limit options. The `:- initialization(Goal)` goals
+of the consulted text run under `*max-prolog-inferences*` and
+`*prolog-deadline*` alone, so a host consulting untrusted text must bind both
+around the call:
+
+```lisp
+(let ((*max-prolog-inferences* 100000)
+      (*prolog-deadline* (prolog-deadline-after 2)))
+  (consult-prolog text rulebase))
 ```
 
 A foreign predicate can start another top-level query while one is running.
 If that nested query passes neither `:max-inferences` nor `:deadline` (or
 passes `nil` for both), it shares the enclosing query's remaining budget and
 deadline, so the enclosing limits still bound the whole computation. If it
-passes a non-`nil` value for either option, it runs under its own limits
-(the passed values, with the specials filling in the other one), and its
-inferences are not charged to the enclosing query.
+passes a non-`nil` value for either option, it runs under its own inference
+budget (the passed value, or `*max-prolog-inferences*`), and its inferences
+are not charged to the enclosing query. Its deadline is the earlier of the
+enclosing query's deadline and its own (the passed value, or
+`*prolog-deadline*`), so a nested query never outlives the enclosing
+deadline.
 
 Both conditions are `prolog-resource-error` subclasses, but Prolog `catch/3`
 does not intercept them, so a goal cannot catch its way past its own budget.
 The stack still unwinds normally: `setup_call_cleanup/3` and `call_cleanup/2`
-run their cleanup goal. That cleanup gets a fresh budget of 10000 inferences
-and no deadline, because the exhausted budget would otherwise stop it at its
-first goal.
+run their cleanup goal. The exhausted budget would stop a cleanup at its first
+goal, so once a query has stopped, its cleanups run on a separate allowance of
+1000 inferences. The allowance is shared: every cleanup of that query,
+including cleanups nested inside other cleanups, draws on the same 1000, so a
+cleanup cannot obtain a new allowance by starting another
+`setup_call_cleanup/3`. The allowance also has a deadline 500 ms after the
+query stopped (after the query's deadline, when the deadline is what stopped
+it), checked at every inference. A cleanup that exhausts the allowance raises
+the same two conditions.
 
 ## Capability Policy
 

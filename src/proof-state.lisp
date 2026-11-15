@@ -134,7 +134,8 @@ caller passed none.  A query nested inside a running query that has limits
 (a foreign predicate re-entering the engine) and passes neither limit shares
 the enclosing query's remaining budget and deadline.  Otherwise the query gets
 its own limits: the explicit values, or *MAX-PROLOG-INFERENCES* and
-*PROLOG-DEADLINE* for :DEFAULT."
+*PROLOG-DEADLINE* for :DEFAULT, except that its deadline is never later
+than the enclosing query's."
   (let ((enclosing *inference-limits*))
     (if (and enclosing
              (member max-inferences '(nil :default))
@@ -150,6 +151,13 @@ its own limits: the explicit values, or *MAX-PROLOG-INFERENCES* and
                           (if (eq deadline :default)
                               *prolog-deadline*
                               deadline))))
+          ;; A nested query with limits of its own still stops at the
+          ;; enclosing deadline.
+          (when (and enclosing (%inference-limits-deadline enclosing))
+            (setf deadline
+                  (if deadline
+                      (min deadline (%inference-limits-deadline enclosing))
+                      (%inference-limits-deadline enclosing))))
           (if (and (null limit) (null deadline))
               (let ((*inference-limits* nil)
                     (*inference-countdown* most-positive-fixnum))
