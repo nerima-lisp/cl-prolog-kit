@@ -16,7 +16,7 @@ examples.
   `make-clause`
 - Rulebase representation: `rulebase`, `rulebase-p`,
   `rulebase-visible-clauses`, `make-rulebase`, `copy-rulebase`,
-  `rulebase-extend`, `rulebase-insert-clause!`
+  `rulebase-extend`, `rulebase-insert-clause!`, `rulebase-insert-clauses!`
 - Snapshots and temporary clauses: `rulebase-snapshot`,
   `call-with-overlay-facts`, `with-overlay-facts`
 
@@ -24,6 +24,17 @@ A clause with an empty body is a fact. Rulebases are explicit values; the
 library has no global rulebase. Prefer `prolog` and `extend-rulebase` for
 declarative construction. `rulebase-insert-clause!` and the dynamic database
 goals provide intentional mutation with logical-update semantics.
+
+`(rulebase-insert-clauses! rulebase clauses &key (position :last) (module
++default-prolog-module+) source)` inserts a list of clauses and returns
+`rulebase`. With `:last` the result is the same as calling
+`rulebase-insert-clause!` for each clause in order; with `:first` the clauses
+keep their order and precede the existing clauses. All of them share one new
+revision, so a query already running does not see any of them, and each
+affected predicate's lookup index is rebuilt once instead of once per clause.
+An empty list leaves the rulebase and its revision unchanged. Every clause is
+validated before the rulebase changes, so a malformed clause signals an error
+and inserts nothing. `rulebase-extend` uses it.
 
 `copy-rulebase` is useful when dynamic updates must not affect a reusable
 base. It copies stored terms and mutable registries while allowing immutable

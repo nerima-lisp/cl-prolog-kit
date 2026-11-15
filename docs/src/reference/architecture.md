@@ -229,6 +229,18 @@ invocation continues over its snapshot even when a dynamic goal changes the
 database. Later invocations observe the newer revision. Callers that require
 isolation can use `copy-rulebase` before mutation.
 
+Clause selection uses each predicate's first argument. When a goal's first
+argument is bound to an atom, a number or character, a string, or a compound
+term, only the clauses whose first argument can match it are tried, together
+with the clauses whose first argument is a variable, in their original order.
+Atoms are matched by text, so two symbols that denote the same atom select the
+same clauses; strings and atoms never select each other. A compound term is
+keyed by its functor and arity; a Prolog list is a chain of conses, so
+`[a, b, c]` is keyed like `a(b, c)`. A goal whose first argument is unbound, a
+compound whose functor or tail is unbound, or any other Lisp object tries every
+clause. Stored clauses own copies of their strings, so mutating a string after
+inserting it does not change the rulebase.
+
 Retracted entries are marked dead, not removed, so an in-flight invocation's
 snapshot stays valid. Once a rulebase's dead-entry backlog passes an internal
 threshold, the next top-level engine call (`map-prolog-solutions`,
