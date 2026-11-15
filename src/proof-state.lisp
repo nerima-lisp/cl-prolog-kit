@@ -93,7 +93,8 @@ exhausted.  Called only when *INFERENCE-COUNTDOWN* went negative."
     (if reserve (min reserve chunk) chunk)))
 
 (defmacro %count-inference ()
-  "Charge one goal dispatch against the running query's limits."
+  "Charge one inference (a goal dispatch or a builtin solution) against the
+running query's limits."
   `(when (minusp (decf *inference-countdown*))
      (%inference-countdown-expired)))
 

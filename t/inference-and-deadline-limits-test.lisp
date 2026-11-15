@@ -30,6 +30,11 @@ path.  Fresh per query so no table or descriptor cache changes the count."
   (handler-case (progn (funcall function) nil)
     (type-error () t)))
 
+(defun limits-test-query (rulebase text &rest options)
+  "Run the Prolog query TEXT, read as Prolog source so its atoms name the
+builtins and the predicates CONSULT-PROLOG defined."
+  (apply #'query-prolog rulebase (read-prolog-term text) options))
+
 (defun limits-test-past-deadline ()
   (1- (get-internal-real-time)))
 
@@ -56,10 +61,18 @@ path.  Fresh per query so no table or descriptor cache changes the count."
         (query-prolog (limits-test-graph) '(path a ?x)
                       :max-inferences (1- +path-a-all-inferences+)))))
 
-(deftest zero-inference-budget-rejects-the-first-dispatch ()
+(deftest builtin-costs-its-dispatch-and-each-solution ()
   (is (limits-test-condition (prolog-inference-limit-exceeded)
         (query-prolog (make-rulebase) '(true) :max-inferences 0)))
-  (is-equal '(nil) (query-prolog (make-rulebase) '(true) :max-inferences 1)))
+  (is (limits-test-condition (prolog-inference-limit-exceeded)
+        (query-prolog (make-rulebase) '(true) :max-inferences 1)))
+  (is-equal '(nil) (query-prolog (make-rulebase) '(true) :max-inferences 2))
+  ;; One dispatch plus three solutions.
+  (is-equal 3 (length (limits-test-query (make-rulebase) "between(1, 3, X)."
+                                         :max-inferences 4)))
+  (is (limits-test-condition (prolog-inference-limit-exceeded)
+        (limits-test-query (make-rulebase) "between(1, 3, X)."
+                           :max-inferences 3))))
 
 (deftest inference-limit-stops-an-infinite-loop ()
   (let ((condition (limits-test-condition (prolog-inference-limit-exceeded)
@@ -90,10 +103,11 @@ path.  Fresh per query so no table or descriptor cache changes the count."
 (deftest nested-findall-and-setof-share-the-query-budget ()
   (is-equal 3 (length (query-prolog (limits-test-graph) '(path a ?x)
                                     :max-inferences +path-a-all-inferences+)))
-  ;; The collector costs one dispatch on top of the inner enumeration.
+  ;; The collector costs its dispatch and its one solution on top of the
+  ;; inner enumeration.
   (dolist (collector '(findall setof))
     (let ((query (list collector '?x '(path a ?x) '?l))
-          (needed (1+ +path-a-all-inferences+)))
+          (needed (+ 2 +path-a-all-inferences+)))
       (is-equal 1 (length (query-prolog (limits-test-graph) query
                                         :max-inferences needed)))
       (is (limits-test-condition (prolog-inference-limit-exceeded)
@@ -209,8 +223,8 @@ path.  Fresh per query so no table or descriptor cache changes the count."
 
 (deftest nested-top-level-query-inherits-or-replaces-the-budget ()
   ;; Without a limit of its own the nested query draws on the enclosing
-  ;; budget: one dispatch for the foreign goal plus the nested proof.
-  (let ((needed (1+ +path-a-d-inferences+)))
+  ;; budget: the foreign goal's dispatch and solution plus the nested proof.
+  (let ((needed (+ 2 +path-a-d-inferences+)))
     (is-equal '(nil) (query-prolog (limits-test-graph)
                                    '(limits-test-nested-path none)
                                    :max-inferences needed))
@@ -222,8 +236,26 @@ path.  Fresh per query so no table or descriptor cache changes the count."
   (is-equal '(nil)
             (query-prolog (limits-test-graph)
                           (list 'limits-test-nested-path +path-a-d-inferences+)
-                          :max-inferences 1))
+                          :max-inferences 2))
   (is (limits-test-condition (prolog-inference-limit-exceeded)
         (query-prolog (limits-test-graph)
                       (list 'limits-test-nested-path
                             (1- +path-a-d-inferences+))))))
+
+;;; Regression tests for limit escapes.  Every query carries a deadline as
+;;; well as an inference budget, so a regression fails the test instead of
+;;; hanging the suite.
+
+(deftest builtin-solutions-are-charged-against-the-budget ()
+  (dolist (query '("findall(x, repeat, L)."
+                   "findall(L, length(L, _), Ls)."
+                   "aggregate_all(count, repeat, C)."
+                   "call_nth(repeat, 1000000000000)."
+                   "findall(X, between(1, 100000000000, X), L)."
+                   "r."))
+    (is (limits-test-condition (prolog-inference-limit-exceeded)
+          (limits-test-query (consult-prolog "r :- repeat." (make-rulebase))
+                             query
+                             :max-inferences 200
+                             :deadline (prolog-deadline-after 1)))
+        (format nil "~A must exhaust its inference budget" query))))

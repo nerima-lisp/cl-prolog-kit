@@ -162,6 +162,10 @@ Return (VALUES NORMALIZED-GOAL EXPLICIT-MODULE)."
                (proof-state-bindings solver-state)
                (proof-state-remaining-depth solver-state)
                (lambda (bindings)
+                 ;; A nondeterministic builtin or foreign predicate can emit
+                 ;; without bound (repeat/0, between/3, length/2), so each
+                 ;; solution it produces costs one inference.
+                 (%count-inference)
                  (funcall succeed
                           (%state-with solver-state :bindings bindings))))))
 
