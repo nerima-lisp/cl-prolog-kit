@@ -195,35 +195,61 @@ symbols with their package and binds only CL-USER ones."
           +stack-cleanup-rules+
           goals))
 
-(defun stack-cleanup-sbcl-core ()
-  "Return SBCL's own sbcl.core and the list of the paths tried for it, or
-NIL and that list when none exists.  SBCL_HOME may be unset, and
-SB-INT:SBCL-HOMEDIR-PATHNAME may be NIL: SBCL derives it from argv[0] first,
-which the cl-weave CLI's wrapper sets to its own path.  So the last
-candidates are relative to the runtime binary, in SBCL's install layout
-<prefix>/bin/sbcl and <prefix>/lib/sbcl/sbcl.core, which nixpkgs keeps."
-  (let* ((runtime sb-ext:*runtime-pathname*)
-         (runtime-directory (and runtime (uiop:pathname-directory-pathname runtime)))
-         (tried
-           (remove nil
-                   (list (let ((home (sb-ext:posix-getenv "SBCL_HOME")))
-                           (and home (plusp (length home))
-                                (merge-pathnames "sbcl.core"
-                                                 (uiop:ensure-directory-pathname home))))
-                         (let ((home (sb-int:sbcl-homedir-pathname)))
-                           (and home (merge-pathnames "sbcl.core" home)))
-                         (and runtime-directory
-                              (merge-pathnames "../lib/sbcl/sbcl.core" runtime-directory))
-                         (let ((real (and runtime (probe-file runtime))))
-                           (and real
-                                (merge-pathnames "../lib/sbcl/sbcl.core"
-                                                 (uiop:pathname-directory-pathname real))))))))
-    (values (find-if #'probe-file tried)
-            (mapcar #'namestring tried))))
+(defparameter *stack-cleanup-self-exe* "/proc/self/exe"
+  "Link to the running executable, where the system has one (Linux).")
 
-(defun stack-cleanup-child-results (core goals)
-  "Run each of GOALS in a child SBCL started from CORE under --script, which
-ends the process on a guard page hit, with the shipped stack fraction.  Return the child's
+(defun stack-cleanup-sbcl-runtime-candidates ()
+  "Return the paths that may name the running SBCL runtime binary, the real
+executable first.  Under the cl-weave CLI's wrapper, which runs SBCL with
+`exec -a \"$0\"`, SB-EXT:*RUNTIME-PATHNAME* names the wrapper script on
+Linux, so *STACK-CLEANUP-SELF-EXE* comes first where it exists."
+  (remove-duplicates
+   (remove nil
+           (list (probe-file *stack-cleanup-self-exe*)
+                 sb-ext:*runtime-pathname*
+                 (and sb-ext:*runtime-pathname*
+                      (probe-file sb-ext:*runtime-pathname*))))
+   :test #'equal :key #'namestring))
+
+(defun stack-cleanup-sbcl-runtime-and-core ()
+  "Return an SBCL runtime binary, SBCL's own sbcl.core for it, and a list of
+the runtime and core paths tried, or NIL, NIL and that list when no core
+exists.
+
+The first runtime candidate with a core beside it, in the install layout
+<prefix>/bin/sbcl and <prefix>/lib/sbcl/sbcl.core that nixpkgs keeps, is
+taken, so that the core matches the runtime build; the wrapper script has no
+core beside it.  Otherwise the first runtime candidate is paired with
+the core in SBCL_HOME or SB-INT:SBCL-HOMEDIR-PATHNAME.  Either may be
+unusable under the wrapper: SBCL_HOME may be unset, and SBCL derives the
+home directory from argv[0] first, which the wrapper sets to its own path."
+  (let* ((runtimes (stack-cleanup-sbcl-runtime-candidates))
+         (pairs (mapcar (lambda (runtime)
+                          (cons runtime
+                                (merge-pathnames "../lib/sbcl/sbcl.core"
+                                                 (uiop:pathname-directory-pathname
+                                                  runtime))))
+                        runtimes))
+         (homes (remove nil
+                        (list (let ((home (sb-ext:posix-getenv "SBCL_HOME")))
+                                (and home (plusp (length home))
+                                     (merge-pathnames "sbcl.core"
+                                                      (uiop:ensure-directory-pathname
+                                                       home))))
+                              (let ((home (sb-int:sbcl-homedir-pathname)))
+                                (and home (merge-pathnames "sbcl.core" home))))))
+         (tried (list :runtimes (mapcar #'namestring runtimes)
+                      :cores (mapcar #'namestring (append (mapcar #'cdr pairs) homes))))
+         (own (find-if (lambda (pair) (probe-file (cdr pair))) pairs))
+         (home (find-if #'probe-file homes)))
+    (cond (own (values (car own) (cdr own) tried))
+          ((and home runtimes) (values (first runtimes) home tried))
+          (t (values nil nil tried)))))
+
+(defun stack-cleanup-child-results (runtime core goals)
+  "Run each of GOALS in a child SBCL, the binary RUNTIME started with CORE
+under --script, which ends the process on a guard page hit, with the shipped
+stack fraction.  Return the child's
 exit code, its output when the code is not 0 (else NIL), cut to the first
 2000 and the last 1000 characters, and, when it printed them, its stack
 fraction and one list of (SOLUTION-COUNT OPENED CLOSED COPIED) per goal.  The variable Deep in a goal
@@ -233,7 +259,7 @@ the check.
 
 The parent may itself run from a saved core whose toplevel is a test runner
 (the cl-weave CLI), which would take --script as its own option, so the
-child gets SBCL's own core; see STACK-CLEANUP-SBCL-CORE.  It gets a fresh HOME and
+child gets SBCL's own core; see STACK-CLEANUP-SBCL-RUNTIME-AND-CORE.  It gets a fresh HOME and
 cache, and no other environment, so the runner's ASDF configuration (such as
 output translations into a read-only store) does not reach it."
   (let* ((sbcl-home (uiop:pathname-directory-pathname core))
@@ -251,7 +277,7 @@ output translations into a read-only store) does not reach it."
            (let* ((output (make-string-output-stream))
                   (process
                     (sb-ext:run-program
-                     sb-ext:*runtime-pathname*
+                     runtime
                      (list "--core" (namestring core)
                            "--script" (namestring script))
                      :environment
@@ -277,10 +303,10 @@ output translations into a read-only store) does not reach it."
                      (and (consp printed) (cdr printed)))))
       (uiop:delete-directory-tree directory :validate t :if-does-not-exist :ignore))))
 
-(defun stack-cleanup-shipped-limit-assertions (core)
+(defun stack-cleanup-shipped-limit-assertions (runtime core)
   (multiple-value-bind (code output-tail fraction results)
       (stack-cleanup-child-results
-       core
+       runtime core
        '("catch(rec(0), error(resource_error(control_stack), _), true)."
          "assertz(deep(Deep)),
           catch(rec_deep(0), error(resource_error(control_stack), _), true)."))
@@ -306,8 +332,8 @@ output translations into a read-only store) does not reach it."
   ;; each cleanup then copies a term too deep for the margin and stops at
   ;; the ceiling, so none reaches copied/1; that stop is dropped while the
   ;; first one unwinds, so catch/3 still receives the resource error.
-  (multiple-value-bind (core tried) (stack-cleanup-sbcl-core)
+  (multiple-value-bind (runtime core tried) (stack-cleanup-sbcl-runtime-and-core)
     ;; Names the paths tried in the failure report when none exists.
     (is-equal nil (unless core (list :no-sbcl-core-among tried)))
     (when core
-      (stack-cleanup-shipped-limit-assertions core))))
+      (stack-cleanup-shipped-limit-assertions runtime core))))
