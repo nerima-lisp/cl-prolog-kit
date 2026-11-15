@@ -160,19 +160,11 @@ lv/1 ran before the stop that TEXT catches."
     (is (< 100 (- cleanup plain) 400) (list plain cleanup))
     (is (<= nested cleanup) (list cleanup nested))))
 
-(defun stack-cleanup-child-results (goals)
-  "Run each of GOALS in a child SBCL under --script, which ends the process
-on a guard page hit, with the shipped stack fraction.  Return the child's
-exit code, its output and, when it printed them, its stack fraction and one
-list of (SOLUTION-COUNT OPENED CLOSED COPIED) per goal.  The variable Deep in
-a goal stands for a term nested 4000 levels deep, too deep to copy within
-the cleanup margin and shallow enough for query entry, which walks it
-without the check."
-  (uiop:with-temporary-file (:stream stream :pathname script :type "lisp"
-                             :direction :output)
-    ;; The child reads this text after loading the system, so it names
-    ;; the system's symbols with their package and binds only CL-USER ones.
-    (format stream "(require :asdf)
+(defun stack-cleanup-child-script (goals)
+  "Return the text of the child's script; see STACK-CLEANUP-CHILD-RESULTS.
+The child reads it after loading the system, so it names the system's
+symbols with their package and binds only CL-USER ones."
+  (format nil "(require :asdf)
 (asdf:load-asd ~S)
 (let ((*standard-output* (make-broadcast-stream))
       (*error-output* (make-broadcast-stream)))
@@ -199,21 +191,65 @@ without the check."
   (print (cons cl-prolog-kit::*control-stack-limit-fraction*
                (mapcar #'run '~S))))
 "
-            (namestring (asdf:system-source-file "cl-prolog-kit"))
-            +stack-cleanup-rules+
-            goals)
-    :close-stream
-    (multiple-value-bind (output error-output code)
-        (uiop:run-program (list (namestring sb-ext:*runtime-pathname*)
-                                "--core" (namestring sb-ext:*core-pathname*)
-                                "--script" (namestring script))
-                          :output :string :error-output :string
-                          :ignore-error-status t)
-      (let ((printed (ignore-errors (read-from-string output))))
-        (values code
-                (concatenate 'string output error-output)
-                (car printed)
-                (cdr printed))))))
+          (namestring (asdf:system-source-file "cl-prolog-kit"))
+          +stack-cleanup-rules+
+          goals))
+
+(defun stack-cleanup-child-results (goals)
+  "Run each of GOALS in a child SBCL under --script, which ends the process
+on a guard page hit, with the shipped stack fraction.  Return the child's
+exit code, its output when the code is not 0 (else NIL), cut to the first
+2000 and the last 1000 characters, and, when it printed them, its stack fraction and one list of
+(SOLUTION-COUNT OPENED CLOSED COPIED) per goal.  The variable Deep in a goal
+stands for a term nested 4000 levels deep, too deep to copy within the
+cleanup margin and shallow enough for query entry, which walks it without
+the check.
+
+The parent may itself run from a saved core whose toplevel is a test runner
+(the cl-weave CLI), which would take --script as its own option, so the
+child gets SBCL's own sbcl.core from SBCL_HOME.  It gets a fresh HOME and
+cache, and no other environment, so the runner's ASDF configuration (such as
+output translations into a read-only store) does not reach it."
+  (let* ((sbcl-home (sb-int:sbcl-homedir-pathname))
+         (directory (uiop:ensure-directory-pathname
+                     (uiop:merge-pathnames*
+                      (format nil "cl-prolog-kit-stack-~36R"
+                              (random (expt 2 64) (make-random-state t)))
+                      (uiop:temporary-directory))))
+         (script (merge-pathnames "child.lisp" directory)))
+    (ensure-directories-exist (merge-pathnames "cache/" directory))
+    (unwind-protect
+         (progn
+           (with-open-file (stream script :direction :output)
+             (write-string (stack-cleanup-child-script goals) stream))
+           (let* ((output (make-string-output-stream))
+                  (process
+                    (sb-ext:run-program
+                     sb-ext:*runtime-pathname*
+                     (list "--core" (namestring (merge-pathnames "sbcl.core" sbcl-home))
+                           "--script" (namestring script))
+                     :environment
+                     (list (format nil "SBCL_HOME=~A" (namestring sbcl-home))
+                           (format nil "HOME=~A" (namestring directory))
+                           (format nil "XDG_CACHE_HOME=~Acache/" (namestring directory))
+                           (format nil "CL_SOURCE_REGISTRY=~A"
+                                   (namestring
+                                    (asdf:system-source-directory "cl-prolog-kit"))))
+                     :directory directory
+                     :input nil :output output :error output :wait t))
+                  (code (sb-ext:process-exit-code process))
+                  (text (get-output-stream-string output))
+                  (printed (and (eql code 0)
+                                (ignore-errors (read-from-string text)))))
+             (values code
+                     (unless (eql code 0)
+                       (if (<= (length text) 3000)
+                           text
+                           (concatenate 'string (subseq text 0 2000) " ... "
+                                        (subseq text (- (length text) 1000)))))
+                     (and (consp printed) (car printed))
+                     (and (consp printed) (cdr printed)))))
+      (uiop:delete-directory-tree directory :validate t :if-does-not-exist :ignore))))
 
 (deftest cleanups-after-a-stack-stop-run-at-the-shipped-limit (:timeout 120)
   ;; A child SBCL loads the system and runs about 2000 levels of proof
@@ -225,17 +261,19 @@ without the check."
   ;; each cleanup then copies a term too deep for the margin and stops at
   ;; the ceiling, so none reaches copied/1; that stop is dropped while the
   ;; first one unwinds, so catch/3 still receives the resource error.
-  (multiple-value-bind (code output fraction results)
+  (multiple-value-bind (code output-tail fraction results)
       (stack-cleanup-child-results
        '("catch(rec(0), error(resource_error(control_stack), _), true)."
          "assertz(deep(Deep)),
           catch(rec_deep(0), error(resource_error(control_stack), _), true)."))
-    (is-equal 0 code output)
-    (is-equal 4/5 fraction output)
-    (is-equal 2 (length results) output)
+    ;; The tail of the child's output is NIL on exit code 0 and shows in
+    ;; the failure report otherwise.
+    (is-equal '(0 nil) (list code output-tail))
+    (is-equal 4/5 fraction)
+    (is-equal 2 (length results))
     (loop for (solutions opened closed) in results
-          do (is-equal 1 solutions output)
+          do (is-equal 1 solutions)
              ;; A quarter of the stack holds about 300 levels of rec/1.
-             (is (> opened 600) output)
-             (is-equal opened closed output))
-    (is-equal 0 (fourth (second results)) output)))
+             (is (> opened 600))
+             (is-equal opened closed))
+    (is-equal 0 (fourth (second results)))))
