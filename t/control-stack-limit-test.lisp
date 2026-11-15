@@ -195,22 +195,48 @@ symbols with their package and binds only CL-USER ones."
           +stack-cleanup-rules+
           goals))
 
-(defun stack-cleanup-child-results (goals)
-  "Run each of GOALS in a child SBCL under --script, which ends the process
-on a guard page hit, with the shipped stack fraction.  Return the child's
+(defun stack-cleanup-sbcl-core ()
+  "Return SBCL's own sbcl.core and the list of the paths tried for it, or
+NIL and that list when none exists.  SBCL_HOME may be unset, and
+SB-INT:SBCL-HOMEDIR-PATHNAME may be NIL: SBCL derives it from argv[0] first,
+which the cl-weave CLI's wrapper sets to its own path.  So the last
+candidates are relative to the runtime binary, in SBCL's install layout
+<prefix>/bin/sbcl and <prefix>/lib/sbcl/sbcl.core, which nixpkgs keeps."
+  (let* ((runtime sb-ext:*runtime-pathname*)
+         (runtime-directory (and runtime (uiop:pathname-directory-pathname runtime)))
+         (tried
+           (remove nil
+                   (list (let ((home (sb-ext:posix-getenv "SBCL_HOME")))
+                           (and home (plusp (length home))
+                                (merge-pathnames "sbcl.core"
+                                                 (uiop:ensure-directory-pathname home))))
+                         (let ((home (sb-int:sbcl-homedir-pathname)))
+                           (and home (merge-pathnames "sbcl.core" home)))
+                         (and runtime-directory
+                              (merge-pathnames "../lib/sbcl/sbcl.core" runtime-directory))
+                         (let ((real (and runtime (probe-file runtime))))
+                           (and real
+                                (merge-pathnames "../lib/sbcl/sbcl.core"
+                                                 (uiop:pathname-directory-pathname real))))))))
+    (values (find-if #'probe-file tried)
+            (mapcar #'namestring tried))))
+
+(defun stack-cleanup-child-results (core goals)
+  "Run each of GOALS in a child SBCL started from CORE under --script, which
+ends the process on a guard page hit, with the shipped stack fraction.  Return the child's
 exit code, its output when the code is not 0 (else NIL), cut to the first
-2000 and the last 1000 characters, and, when it printed them, its stack fraction and one list of
-(SOLUTION-COUNT OPENED CLOSED COPIED) per goal.  The variable Deep in a goal
+2000 and the last 1000 characters, and, when it printed them, its stack
+fraction and one list of (SOLUTION-COUNT OPENED CLOSED COPIED) per goal.  The variable Deep in a goal
 stands for a term nested 4000 levels deep, too deep to copy within the
 cleanup margin and shallow enough for query entry, which walks it without
 the check.
 
 The parent may itself run from a saved core whose toplevel is a test runner
 (the cl-weave CLI), which would take --script as its own option, so the
-child gets SBCL's own sbcl.core from SBCL_HOME.  It gets a fresh HOME and
+child gets SBCL's own core; see STACK-CLEANUP-SBCL-CORE.  It gets a fresh HOME and
 cache, and no other environment, so the runner's ASDF configuration (such as
 output translations into a read-only store) does not reach it."
-  (let* ((sbcl-home (sb-int:sbcl-homedir-pathname))
+  (let* ((sbcl-home (uiop:pathname-directory-pathname core))
          (directory (uiop:ensure-directory-pathname
                      (uiop:merge-pathnames*
                       (format nil "cl-prolog-kit-stack-~36R"
@@ -226,7 +252,7 @@ output translations into a read-only store) does not reach it."
                   (process
                     (sb-ext:run-program
                      sb-ext:*runtime-pathname*
-                     (list "--core" (namestring (merge-pathnames "sbcl.core" sbcl-home))
+                     (list "--core" (namestring core)
                            "--script" (namestring script))
                      :environment
                      (list (format nil "SBCL_HOME=~A" (namestring sbcl-home))
@@ -251,18 +277,10 @@ output translations into a read-only store) does not reach it."
                      (and (consp printed) (cdr printed)))))
       (uiop:delete-directory-tree directory :validate t :if-does-not-exist :ignore))))
 
-(deftest cleanups-after-a-stack-stop-run-at-the-shipped-limit (:timeout 120)
-  ;; A child SBCL loads the system and runs about 2000 levels of proof
-  ;; search, so this takes longer than the default timeout.  Run at the
-  ;; shipped fraction, where before the cleanup margin the
-  ;; cleanups of rec/1 stopped again one on top of the other until SBCL
-  ;; ended the process.  Every cleanup runs at about the depth of the stop
-  ;; and fits in the margin, so each opened level is closed.  In rec_deep/1
-  ;; each cleanup then copies a term too deep for the margin and stops at
-  ;; the ceiling, so none reaches copied/1; that stop is dropped while the
-  ;; first one unwinds, so catch/3 still receives the resource error.
+(defun stack-cleanup-shipped-limit-assertions (core)
   (multiple-value-bind (code output-tail fraction results)
       (stack-cleanup-child-results
+       core
        '("catch(rec(0), error(resource_error(control_stack), _), true)."
          "assertz(deep(Deep)),
           catch(rec_deep(0), error(resource_error(control_stack), _), true)."))
@@ -277,3 +295,19 @@ output translations into a read-only store) does not reach it."
              (is (> opened 600))
              (is-equal opened closed))
     (is-equal 0 (fourth (second results)))))
+
+(deftest cleanups-after-a-stack-stop-run-at-the-shipped-limit (:timeout 120)
+  ;; A child SBCL loads the system and runs about 2000 levels of proof
+  ;; search, so this takes longer than the default timeout.  Run at the
+  ;; shipped fraction, where before the cleanup margin the
+  ;; cleanups of rec/1 stopped again one on top of the other until SBCL
+  ;; ended the process.  Every cleanup runs at about the depth of the stop
+  ;; and fits in the margin, so each opened level is closed.  In rec_deep/1
+  ;; each cleanup then copies a term too deep for the margin and stops at
+  ;; the ceiling, so none reaches copied/1; that stop is dropped while the
+  ;; first one unwinds, so catch/3 still receives the resource error.
+  (multiple-value-bind (core tried) (stack-cleanup-sbcl-core)
+    ;; Names the paths tried in the failure report when none exists.
+    (is-equal nil (unless core (list :no-sbcl-core-among tried)))
+    (when core
+      (stack-cleanup-shipped-limit-assertions core))))
