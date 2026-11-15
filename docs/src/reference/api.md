@@ -282,24 +282,22 @@ by default.
   `prolog-inference-limit-exceeded`.
 - `*prolog-deadline*`: the default deadline, `nil` or an absolute
   `get-internal-real-time` value. A query still running at the deadline raises
-  `prolog-deadline-exceeded`. The deadline is checked when the query starts and
-  then every N inferences; without a deadline the clock is never read. N
-  starts at 1, restarts at 1 when a cleanup goal starts, and adapts at each
-  check, between 1 and 256: it halves when more than 10 ms passed since the
-  previous check, and doubles when less than 1 ms did. In addition, a
-  builtin call that allocates more than 512 list elements or characters
-  under `*max-prolog-builtin-output-length*` makes the next inference check
-  the deadline. A query therefore stops after its deadline by at most the
-  builtin call running then plus W, the time of the at most 256 inferences
-  since the previous check, none of which made such an allocation. While
-  inferences keep taking about the same time, W is at most about 10 ms, or
-  one inference when a single inference takes longer. The time of one
-  builtin call is bounded only by `*max-prolog-builtin-output-length*` and
-  the other per-call limits under Runtime Resource Limits above. A builtin
-  whose work grows with a term it is given rather than with a count, such
-  as `msort/2` on a long list, does not check the deadline early, so a
-  query that switches from cheap inferences to a run of such calls can make
-  up to 256 of them after the deadline.
+  `prolog-deadline-exceeded`. Without a deadline the clock is never read.
+  With one, the clock is read when the query starts and then every N
+  inferences, where N is between 1 and 256. N starts at 1, restarts at 1
+  when a cleanup goal starts, halves when more than 10 ms passed since the
+  previous read, and doubles when less than 1 ms did. After a builtin call
+  that produces large output (more than 512 list elements or characters,
+  the output `*max-prolog-builtin-output-length*` bounds), the clock is
+  always read at the next inference.
+
+  After the effective deadline passes, the query stops within the time of
+  the at most N inferences until the clock is next read. One inference
+  includes at most one builtin call. Builtins whose cost grows with their
+  input rather than with their output, such as `msort/2` on a long list, do
+  not cause an early read. When such calls run back to back, the delay can
+  reach 256 of them, which for `msort/2` on a list of a few thousand
+  elements is several hundred milliseconds.
 - `(prolog-deadline-after seconds)` returns the `get-internal-real-time` value
   `seconds` (a non-negative real) from now.
 
@@ -332,13 +330,12 @@ around the call:
   (consult-prolog text rulebase))
 ```
 
-One root query uses at most L + 1000 inferences and stops by
-D + 500 ms + B + W, where L and D are the root's inference limit and
-deadline, 1000 inferences and 500 ms are the cleanup allowance described
-below, B is the builtin call running at that moment, and W is the time of
-the at most 256 inferences since the previous deadline check, both
-described for `*prolog-deadline*` above. The root is the outermost query
-running in a thread. The bound covers every query nested inside it,
+One root query uses at most L + 1000 inferences. Its effective deadline
+is at most D + 500 ms, and it stops within the delay described for
+`*prolog-deadline*` above after that deadline passes. L and D are the
+root's inference limit and deadline, and 1000 inferences and 500 ms are the
+cleanup allowance described below. The root is the outermost query running
+in a thread. The bound covers every query nested inside it,
 and holds whether a stop unwinds to the host, is replaced by a ball that a
 cleanup throws and `catch/3` catches, or is handled by host code that carries
 on. When the root has no limit or no deadline, the same bound holds for each

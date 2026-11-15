@@ -20,22 +20,25 @@
 One inference is one goal dispatch, one solution produced by a builtin or
 foreign predicate, or one candidate examined by a builtin that searches.  A
 query that needs more raises PROLOG-INFERENCE-LIMIT-EXCEEDED.  Cleanup goals
-together run at most 1000 inferences past the limit in force when they start.  A query nested inside another
-is charged to the outermost one, and its own budget can only lower the
-enclosing one.")
+together run at most 1000 inferences past the limit in force when they
+start.  A query nested inside another is charged to the outermost one, and
+its own budget can only lower the enclosing one.")
 
 (defparameter *prolog-deadline* nil
   "Default absolute GET-INTERNAL-REAL-TIME deadline of a top-level query, or
-NIL for none.  A query still running at it raises PROLOG-DEADLINE-EXCEEDED
-after at most the builtin call running then plus up to 256 inferences: the
-deadline is checked every 1 to 256 inferences, an interval halved when more
-than 10 ms passed since the previous check and doubled when less than 1 ms
-did, and at the inference after any builtin call
-that allocates more than 512 elements under
-*MAX-PROLOG-BUILTIN-OUTPUT-LENGTH*, which also bounds that call.  Cleanup
-goals together run at most 500 ms past the deadline; each checks the deadline
-at its first inference.  A query nested inside another cannot have a later
-deadline than the enclosing one.  See PROLOG-DEADLINE-AFTER.")
+NIL for none.  A query still running at it raises PROLOG-DEADLINE-EXCEEDED.
+With a deadline the clock is read every N inferences, N between 1 and 256,
+halved when more than 10 ms passed since the previous read and doubled when
+less than 1 ms did; without one it is never read.  After a builtin call
+whose output *MAX-PROLOG-BUILTIN-OUTPUT-LENGTH* bounds produces more than
+512 elements, the clock is always read at the next inference.  So after the
+effective deadline the query stops within the at most N inferences until
+the next read, each including at most one builtin call.  Back-to-back calls
+of builtins whose cost grows with their input, such as msort/2, can make
+that up to 256 calls.  Cleanup goals run under a deadline at most 500 ms
+later; each reads the clock at its first inference.  A query nested inside
+another cannot have a later deadline than the enclosing one.  See
+PROLOG-DEADLINE-AFTER.")
 
 (defparameter *max-prolog-builtin-output-length* 1048576
   "Maximum number of characters or list elements a single builtin call may
