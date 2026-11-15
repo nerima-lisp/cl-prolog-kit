@@ -18,7 +18,7 @@
   ;; Single source of truth for the version. flake.nix parses this exact form
   ;; (first match wins) and release.yml refuses to publish a tag that
   ;; disagrees with it, so a release edits this one line.
-  :version "1.5.0"
+  :version "1.6.0"
   :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
@@ -99,7 +99,7 @@
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.5.0"
+  :version "1.6.0"
   :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
@@ -118,7 +118,7 @@
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.5.0"
+  :version "1.6.0"
   :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
@@ -187,7 +187,7 @@
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.5.0"
+  :version "1.6.0"
   :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
@@ -209,7 +209,7 @@
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.5.0"
+  :version "1.6.0"
   :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
@@ -233,7 +233,7 @@
   :author "takeokunn <bararararatty@gmail.com>"
   :maintainer "takeokunn <bararararatty@gmail.com>"
   :license "MIT"
-  :version "1.5.0"
+  :version "1.6.0"
   :homepage "https://github.com/nerima-lisp/cl-prolog-kit"
   :bug-tracker "https://github.com/nerima-lisp/cl-prolog-kit/issues"
   :source-control (:git "https://github.com/nerima-lisp/cl-prolog-kit.git")
